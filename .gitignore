@@ -1,2 +1,5 @@
 *.pyc
 *.npy
+*checkpoint*
+.idea
+__pycache__

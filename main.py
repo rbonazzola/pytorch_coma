@@ -10,7 +10,8 @@ import mesh_operations
 from config_parser import read_config
 from data import ComaDataset
 from model import Coma
-from transform import Normalize
+from cardiac_mesh import CardiacMesh
+# from transform import Normalize
 
 
 def scipy_to_torch_sparse(scp_matrix):
@@ -22,6 +23,7 @@ def scipy_to_torch_sparse(scp_matrix):
 
     sparse_tensor = torch.sparse.FloatTensor(i, v, torch.Size(shape))
     return sparse_tensor
+
 
 def adjust_learning_rate(optimizer, lr_decay):
 
@@ -39,9 +41,11 @@ def save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir):
 
 
 def main(args):
+
     if not os.path.exists(args.conf):
         print('Config not found' + args.conf)
 
+    ################################################################################
     config = read_config(args.conf)
 
     print('Initializing parameters')
@@ -54,12 +58,6 @@ def main(args):
         checkpoint_dir = config['checkpoint_dir']
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
-
-    visualize = config['visualize']
-    output_dir = config['visual_output_dir']
-    if visualize is True and not output_dir:
-        print('No visual output directory is provided. Checkpoint directory will be used to store the visual results')
-        output_dir = checkpoint_dir
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -76,6 +74,7 @@ def main(args):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    ################################################################################
     print('Generating transforms')
     M, A, D, U = mesh_operations.generate_transform_matrices(template_mesh, config['downsampling_factors'])
 
@@ -84,21 +83,41 @@ def main(args):
     A_t = [scipy_to_torch_sparse(a).to(device) for a in A]
     num_nodes = [len(M[i].v) for i in range(len(M))]
 
+    ################################################################################
+    ### LOAD DATA
     print('Loading Dataset')
     if args.data_dir:
         data_dir = args.data_dir
     else:
         data_dir = config['data_dir']
 
-    normalize_transform = Normalize()
-    dataset = ComaDataset(data_dir, dtype='train', split=args.split, split_term=args.split_term, pre_transform=normalize_transform)
-    dataset_test = ComaDataset(data_dir, dtype='test', split=args.split, split_term=args.split_term, pre_transform=normalize_transform)
+    # normalize_transform = Normalize()
+    #ComaDataset(data_dir, dtype='train', split=args.split, split_term=args.split_term, pre_transform=normalize_transform)
+    # dataset_test = ComaDataset(data_dir, dtype='test', split=args.split, split_term=args.split_term, pre_transform=normalize_transform)
+
+    dataset = CardiacMesh(
+        nTraining=config['nTraining'],
+        nVal=config['nTraining'],
+        train_file=train_file,
+        ids_file=config['ids_file'],
+        reference_mesh_file=template_file_path, #config['reference_mesh_file'],
+        # pca_n_comp=params['nz'],
+        subpart=CardiacMesh.SUBPARTS_IDS[config['partition']],
+        procrustes_scaling=config["procrustes_scaling"],
+        procrustes_type=config["procrustes_type"]
+    )
+
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=workers_thread)
     test_loader = DataLoader(dataset_test, batch_size=1, shuffle=False, num_workers=workers_thread)
 
     print('Loading model')
+    ################################################################################
+
     start_epoch = 1
     coma = Coma(dataset, config, D_t, U_t, A_t, num_nodes)
+
+    ################################################################################
+    ### SELECT OPTIMIZER
     if opt == 'adam':
         optimizer = torch.optim.Adam(coma.parameters(), lr=lr, weight_decay=weight_decay)
     elif opt == 'sgd':
@@ -160,30 +179,6 @@ def train(coma, train_loader, len_dataset, optimizer, device):
         loss.backward()
         optimizer.step()
     return total_loss / len_dataset
-
-
-def evaluate(coma, output_dir, test_loader, dataset, template_mesh, device, visualize=False):
-    coma.eval()
-    total_loss = 0
-    meshviewer = MeshViewers(shape=(1, 2))
-    for i, data in enumerate(test_loader):
-        data = data.to(device)
-        with torch.no_grad():
-            out = coma(data)
-        loss = F.l1_loss(out, data.y)
-        total_loss += data.num_graphs * loss.item()
-
-        if visualize and i % 100 == 0:
-            save_out = out.detach().cpu().numpy()
-            save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
-            expected_out = (data.y.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
-            result_mesh = Mesh(v=save_out, f=template_mesh.f)
-            expected_mesh = Mesh(v=expected_out, f=template_mesh.f)
-            meshviewer[0][0].set_dynamic_meshes([result_mesh])
-            meshviewer[0][1].set_dynamic_meshes([expected_mesh])
-            meshviewer[0][0].save_snapshot(os.path.join(output_dir, 'file'+str(i)+'.png'), blocking=False)
-
-    return total_loss/len(dataset)
 
 
 if __name__ == '__main__':

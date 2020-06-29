@@ -10,6 +10,7 @@ from utils import get_vert_connectivity
 from transform import Normalize
 
 class ComaDataset(InMemoryDataset):
+
     def __init__(self, root_dir, dtype='train', split='sliced', split_term='sliced', nVal = 100, transform=None, pre_transform=None):
         self.root_dir = root_dir
         self.split = split
