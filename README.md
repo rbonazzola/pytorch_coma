@@ -74,7 +74,7 @@ This decision was made in order to facilitate reusability of subsets of run para
 
 
 ### Tracking the experiments 
-Complete this section.    
+Complete this section.
     
 ## Evaluation
 To evaluate on test data you just need to set eval flag to true in default.cfg and provide the path of checkpoint file.
@@ -88,13 +88,7 @@ ln -s <GWAS_PIPELINE_REPO_PATH> GWAS_pipeline
 ```
 
 ## Data preparation
-Although when you run the training, the data preprocessing takes place if the data is not already there. But if you want you can prepare the data before running the training as explained below.
-
-  1. Download the data from the [Project Page](https://coma.is.tue.mpg.de/)
-
-         python data.py --split sliced --data_dir PathToData
-         python data.py --split expression --data_dir PathToData 
-         python data.py --split identity --data_dir PathToData 
+ 
 
 
 #### Note that the pre_transform is provided which normalize the data before storing it. 

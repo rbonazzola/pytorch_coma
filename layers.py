@@ -6,15 +6,19 @@ from torch_geometric.utils import remove_self_loops
 
 from utils import normal
 
+# https://pytorch-geometric.readthedocs.io/en/1.3.1/_modules/torch_geometric/nn/conv/cheb_conv.html
+# https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/nn/conv/cheb_conv.html#ChebConv
 class ChebConv_Coma(ChebConv):
+
     def __init__(self, in_channels, out_channels, K, normalization=None, bias=True):
         super(ChebConv_Coma, self).__init__(in_channels, out_channels, K, normalization, bias)
 
     def reset_parameters(self):
-        normal(self.weight, 0, 0.1)
+        normal(self.weight, 0, 0.1) # Same as torch.nn.init.normal_ but handles None's
         normal(self.bias, 0, 0.1)
 
 
+    # Normalize Laplacian. This is almost entirely copied from the parent class, ChebConv.
     @staticmethod
     def norm(edge_index, num_nodes, edge_weight=None, dtype=None):
         edge_index, edge_weight = remove_self_loops(edge_index, edge_weight)
@@ -24,26 +28,24 @@ class ChebConv_Coma(ChebConv):
                                      dtype=dtype,
                                      device=edge_index.device)
         row, col = edge_index
-        deg = scatter_add(edge_weight, row, dim=0, dim_size=num_nodes)
+        deg = scatter_add(edge_weight, row, dim=0, dim_size=num_nodes) # TODO: Check what scatter_add does.
         deg_inv_sqrt = deg.pow(-0.5)
         deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
         return edge_index, -deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
 
+
     def forward(self, x, edge_index, norm, edge_weight=None):
-        Tx_0 = x
+        # Tx_i are Chebyshev polynomials of x, which are computed recursively
+        Tx_0 = x # Tx_0 is the identity, i.e. Tx_0(x) == x
         out = torch.matmul(Tx_0, self.weight[0])
 
-        x = x.transpose(0,1)
-        Tx_0 = x
         if self.weight.size(0) > 1:
             Tx_1 = self.propagate(edge_index, x=x, norm=norm)
-            Tx_1_transpose = Tx_1.transpose(0, 1)
-            out = out + torch.matmul(Tx_1_transpose, self.weight[1])
+            out = out + torch.matmul(Tx_1, self.weight[1])
 
         for k in range(2, self.weight.size(0)):
             Tx_2 = 2 * self.propagate(edge_index, x=Tx_1, norm=norm) - Tx_0
-            Tx_2_transpose = Tx_2.transpose(0, 1)
-            out = out + torch.matmul(Tx_2_transpose, self.weight[k])
+            out = out + torch.matmul(Tx_2, self.weight[k])
             Tx_0, Tx_1 = Tx_1, Tx_2
 
         if self.bias is not None:
@@ -52,7 +54,7 @@ class ChebConv_Coma(ChebConv):
         return out
 
     def message(self, x_j, norm):
-        return norm.view(-1, 1, 1) * x_j
+        return norm.view(1, -1, 1) * x_j
 
 
 class Pool(MessagePassing):
@@ -60,11 +62,10 @@ class Pool(MessagePassing):
         super(Pool, self).__init__(flow='target_to_source')
 
     def forward(self, x, pool_mat,  dtype=None):
-        x = x.transpose(0,1)
         out = self.propagate(edge_index=pool_mat._indices(), x=x, norm=pool_mat._values(), size=pool_mat.size())
-        return out.transpose(0,1)
+        return out
 
     def message(self, x_j, norm):
-        return norm.view(-1, 1, 1) * x_j
+        return norm.view(1, -1, 1) * x_j
 
 

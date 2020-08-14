@@ -1,0 +1,11 @@
+To install PyTorch-geometric and its dependencies, run the following commands.
+CUDA environment variable should match your CUDA version. If you are not using GPUs, but CPUs, set its value to "cpu".
+
+CUDA=cpu
+TORCH=1.4.0
+
+pip install torch-scatter==latest+${CUDA} -f https://pytorch-geometric.com/whl/torch-${TORCH}.html
+pip install torch-sparse==latest+${CUDA} -f https://pytorch-geometric.com/whl/torch-${TORCH}.html
+pip install torch-cluster==latest+${CUDA} -f https://pytorch-geometric.com/whl/torch-${TORCH}.html
+pip install torch-spline-conv==latest+${CUDA} -f https://pytorch-geometric.com/whl/torch-${TORCH}.html
+pip install torch-geometric

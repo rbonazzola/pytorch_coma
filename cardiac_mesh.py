@@ -7,7 +7,6 @@ import re
 
 # I rename the class VTKObject as Mesh so I don't have to change the function calls in the code
 from VTK.VTKMesh import VTKObject as Mesh  #, MeshViewer, MeshViewers
-import meshio
 import time
 from copy import deepcopy
 import random
@@ -57,21 +56,24 @@ class CardiacMesh(object):
         self.preprocess_meshes()
         self.normalize()
 
+        self.num_features = self.vertices_train.shape[2]
+
         # self.mean = np.mean(self.vertices_train, axis=0)
         # self.std = np.std(self.vertices_train, axis=0)
         # self.pca = PCA(n_components=pca_n_comp)
         # self.pcaMatrix = None
-        # s
 
     def generalized_procrustes(self):
 
         old_disparity, disparity = 0, 1 # random values
         reference_point_cloud = self.reference_mesh.points # reference to align to
 
-        while abs(old_disparity-disparity)/disparity > 1e-3:
+        # while abs(old_disparity-disparity)/disparity > 1e-2:
+        while disparity > 9e-1:
             old_disparity = disparity
             disparity = 0
             for i in range(len(self.all_vertices)):
+                # Docs: https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.procrustes.html
                 mtx1, mtx2, _disparity = procrustes(
                     self.all_vertices[i],
                     reference_point_cloud
@@ -86,15 +88,15 @@ class CardiacMesh(object):
 
     def load_meshes(self):
 
-        '''
-        Load numpy data files containing mesh data and a list of subject IDs.
-        '''
+        ''' Load numpy data files containing mesh data and a list of subject IDs. '''
 
         self.all_vertices = np.load(self.meshes_file, allow_pickle=True) # training + validation + testing
         self.ids = [x.strip() for x in open(self.ids_file)]
 
 
     def partition_dataset(self):
+
+        ''' Partition full dataset into training, testing and validation subsets '''
 
         self.train_ids = self.ids[:self.nTraining]
         self.val_ids = self.ids[self.nTraining: (self.nTraining + self.nVal)]
