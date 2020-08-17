@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
  
-from layers1 import ChebConv_Coma, Pool
+from layers import ChebConv_Coma, Pool
  
 class Coma(torch.nn.Module):
  
