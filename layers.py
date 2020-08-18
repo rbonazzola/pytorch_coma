@@ -6,6 +6,10 @@ from torch_geometric.utils import remove_self_loops
 
 from utils import normal
 
+# N: number of subjects (or, equivalently, meshes)
+# M: number of vertices in mesh
+# F: number of features (typically, 3: x, y and z)
+
 # https://pytorch-geometric.readthedocs.io/en/1.3.1/_modules/torch_geometric/nn/conv/cheb_conv.html
 # https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/nn/conv/cheb_conv.html#ChebConv
 class ChebConv_Coma(ChebConv):
@@ -18,7 +22,7 @@ class ChebConv_Coma(ChebConv):
         normal(self.bias, 0, 0.1)
 
 
-    # Normalize Laplacian. This is almost entirely copied from the parent class, ChebConv.
+    # Normalized Laplacian. This is almost entirely copied from the parent class, ChebConv.
     @staticmethod
     def norm(edge_index, num_nodes, edge_weight=None, dtype=None):
         edge_index, edge_weight = remove_self_loops(edge_index, edge_weight)
@@ -40,11 +44,11 @@ class ChebConv_Coma(ChebConv):
         out = torch.matmul(Tx_0, self.weight[0])
 
         if self.weight.size(0) > 1:
-            Tx_1 = self.propagate(edge_index, x=x, norm=norm)
+            Tx_1 = self.propagate(edge_index, x=x, norm=norm) # propagate amounts to operator composition
             out = out + torch.matmul(Tx_1, self.weight[1])
 
         for k in range(2, self.weight.size(0)):
-            Tx_2 = 2 * self.propagate(edge_index, x=Tx_1, norm=norm) - Tx_0
+            Tx_2 = 2 * self.propagate(edge_index, x=Tx_1, norm=norm) - Tx_0 # recursive definition of Chebyshev polynomials
             out = out + torch.matmul(Tx_2, self.weight[k])
             Tx_0, Tx_1 = Tx_1, Tx_2
 
@@ -54,18 +58,19 @@ class ChebConv_Coma(ChebConv):
         return out
 
     def message(self, x_j, norm):
+        # x_j is in the format (N, M, F)
         return norm.view(1, -1, 1) * x_j
 
 
 class Pool(MessagePassing):
     def __init__(self):
-        super(Pool, self).__init__(flow='target_to_source')
+        # source_to_target is the default value for flow, but is specified here for explicitness
+        super(Pool, self).__init__(flow='source_to_target')
 
     def forward(self, x, pool_mat,  dtype=None):
+        pool_mat = pool_mat.transpose(0, 1)
         out = self.propagate(edge_index=pool_mat._indices(), x=x, norm=pool_mat._values(), size=pool_mat.size())
         return out
 
     def message(self, x_j, norm):
         return norm.view(1, -1, 1) * x_j
-
-

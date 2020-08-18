@@ -22,7 +22,6 @@ class Coma(torch.nn.Module):
         self.upsample_matrices = upsample_matrices
         self.adjacency_matrices = adjacency_matrices
 
-        # from IPython import embed; embed()
         self.A_edge_index, self.A_norm = zip(
             #*[ChebConv_Coma.norm(self.adjacency_matrices[i].coalesce().indices(), num_nodes[i]) for i in range(len(num_nodes))]
             *[ChebConv_Coma.norm(self.adjacency_matrices[i]._indices(), num_nodes[i]) for i in range(len(num_nodes))]

@@ -9,12 +9,12 @@ def set_default_parameters(config):
 
     config.add_section('Input Output')
     config.set('Input Output', 'visualize', 'False')
-    config.set('Input Output', 'data_dir', '/home/rodrigo/data/PhD/meshes/numpy_files/LV_all_subjects/train.npy')
-    config.set('Input Output', 'checkpoint_dir', '/home/rodrigo/pytorch_coma/output/checkpoints/{TIMESTAMP}')
+    config.set('Input Output', 'data_dir', 'data/meshes/numpy_files/LV_all_subjects/train.npy')
+    config.set('Input Output', 'checkpoint_dir', 'output/checkpoints/{TIMESTAMP}')
     config.set('Input Output', 'visual_output_dir', '')
     config.set('Input Output', 'template_fname', './template/template.vtk')
-    config.set('Input Output', 'output_dir', '/home/rodrigo/pytorch_coma/output')
-    config.set('Input Output', 'ids_file', '/home/rodrigo/data/PhD/meshes/numpy_files/LV_all_subjects/LVED_all_subjects_subj_ids.txt') # TODO: add these options into the scripts
+    config.set('Input Output', 'output_dir', 'output')
+    config.set('Input Output', 'ids_file', 'data/meshes/numpy_files/LV_all_subjects/LVED_all_subjects_subj_ids.txt') # TODO: add these options into the scripts
     config.set('Input Output', 'partition', 'LV')
 
     # TODO: add these options into the scripts
