@@ -2,19 +2,14 @@ import os
 import torch
 import numpy as np
 import torch.nn.functional as F
-# from torch_geometric.data import DataLoader
 from torch.utils.data import TensorDataset, DataLoader
-
-
-# from psbody.mesh import Mesh
+from Logger import logger, timestamp
 from VTK.VTKMesh import VTKObject as Mesh
 from config_parser import read_config
 from model import Coma
 from cardiac_mesh import CardiacMesh
 import mesh_operations
 
-# from data import ComaDataset
-# from transform import Normalize
 
 def scipy_to_torch_sparse(scp_matrix):
     indices = np.vstack((scp_matrix.row, scp_matrix.col))
@@ -44,11 +39,10 @@ def save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir):
 
 def main(config):
 
-    print('Initializing parameters')
+    logger.info('Initializing parameters')
 
     checkpoint_dir = config['checkpoint_dir']
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
     format_tokens = {"TIMESTAMP": timestamp}
     checkpoint_dir = checkpoint_dir.format(**format_tokens)
 
@@ -72,7 +66,7 @@ def main(config):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    print('Loading template mesh from %s' % config['template_fname'])
+    logger.info('template mesh from %s' % config['template_fname'])
     template_file_path = config['template_fname']
     template_mesh = Mesh(filename=template_file_path)
     partition = CardiacMesh.SUBPARTS_IDS[config['partition']]
@@ -84,7 +78,7 @@ def main(config):
     # - D: downsampling matrices
     # - U: upsampling matrices
 
-    print('Generating transforms')
+    logger.info('Generating transforms')
     M, A, D, U = mesh_operations.generate_transform_matrices(template_mesh, config['downsampling_factors'])
 
     D_t = [scipy_to_torch_sparse(d).to(device) for d in D]
@@ -94,10 +88,9 @@ def main(config):
 
     ################################################################################
     ### Load data
-    print('Loading Dataset')
+    logger.info('Loading dataset')
     data_dir = config['data_dir']
 
-    # https://stackoverflow.com/questions/52889798/obtain-lengths-of-vectors-without-loading-multiple-npy-files
     dataset = CardiacMesh(
         nTraining=config['nTraining'],
         nVal=config['nVal'],
@@ -109,21 +102,21 @@ def main(config):
         procrustes_type=config["procrustes_type"],
     )
 
+    logger.info("Using %s meshes for training and %s for validation." % (dataset.nTraining, dataset.nVal))
+
     vertices_train = TensorDataset(torch.Tensor(dataset.vertices_train))
     vertices_val = TensorDataset(torch.Tensor(dataset.vertices_val))
+    
     train_loader = DataLoader(vertices_train, batch_size=batch_size, shuffle=True, num_workers=workers_thread)
-
-    # A different batch size can be used for testing. Can the same thing be done in TF1?
     val_loader = DataLoader(vertices_val, batch_size=1, shuffle=False, num_workers=workers_thread)
 
-    print('Loading model')
+    logger.info('Loading CoMA model')
     ################################################################################
 
     start_epoch = 1
     coma = Coma(dataset.num_features, config, D_t, U_t, A_t, num_nodes)
 
     ################################################################################
-    ### SELECT OPTIMIZER
     if opt == 'adam':
         optimizer = torch.optim.Adam(coma.parameters(), lr=lr, weight_decay=weight_decay)
     elif opt == 'sgd':
@@ -133,9 +126,6 @@ def main(config):
 
     # To continue from a previous run
     checkpoint_file = config['checkpoint_file']
-
-    #TODO: Change these print statements for logging.*
-    print(checkpoint_file)
 
     if checkpoint_file:
         checkpoint = torch.load(checkpoint_file)
@@ -151,7 +141,7 @@ def main(config):
 
     if eval_flag:
         val_loss = evaluate(coma, val_loader, dataset.vertices_val, device)
-        print('val loss', val_loss)
+        logger.info('val loss', val_loss)
         return
 
     best_val_loss = float('inf')
@@ -159,13 +149,13 @@ def main(config):
 
     for epoch in range(start_epoch, total_epochs + 1):
 
-        print("Training for epoch ", epoch)
+        logger.info("Training for epoch %s" % epoch)
 
         train_loss = train(coma, train_loader, len(dataset.vertices_train), optimizer, device)
         val_loss = evaluate(coma, val_loader, dataset.vertices_val, device)
             # coma, output_dir, val_loader, dataset.vertices_val, template_mesh, device, visualize=visualize)
 
-        print('epoch ', epoch, ' Train loss ', train_loss, ' Val loss ', val_loss)
+        logger.info('  Train loss %s, Val loss %s' % (train_loss, val_loss))
 
         if val_loss < best_val_loss:
             save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir)
@@ -218,27 +208,21 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
 
     parser.add_argument('-c', '--conf', help='path of config file')
-    parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
-
+    parser.add_argument('-cp', '--checkpoint_dir', default=None, help='path where checkpoints file need to be stored')
     parser.add_argument('-od', '--output_dir', default=None, help='path where to store output')
     parser.add_argument('-id', '--data_dir', default=None, help='path where to fetch input data from')
-
-    # TODO: remove these options
-#   parser.add_argument('-s', '--split', default='sliced', help='split can be sliced, expression or identity ')
-#   parser.add_argument('-st', '--split_term', default='sliced', help='split term can be sliced, expression name '                                                               'or identity name')
-#   parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
 
     args = parser.parse_args()
 
     if args.conf is None:
         args.conf = os.path.join(os.path.dirname(__file__), 'default.cfg')
-        print('configuration file not specified, trying to load '
+        logger.error('configuration file not specified, trying to load '
               'it from current directory', args.conf)
 
     ################################################################################
     ### Read configuration
     if not os.path.exists(args.conf):
-        print('Config not found' + args.conf)
+        logger.error('Config not found' + args.conf)
     config = read_config(args.conf)
 
     if args.data_dir:
