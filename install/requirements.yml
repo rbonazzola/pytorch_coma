@@ -12,4 +12,3 @@ dependencies:
   - gensim
   - jupyter
   - ipython
-  - pytorch=1.4.0
