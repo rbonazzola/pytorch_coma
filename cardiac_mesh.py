@@ -32,7 +32,6 @@ class CardiacMesh(object):
 
     def __init__(self, nVal, nTraining, meshes_file,
                  reference_mesh_file, ids_file=None, subpart=None,
-                 # pca_n_comp=8, fitpca=False,
                  procrustes_scaling=False, procrustes_type="generalized"):
 
         self.vertices_train, self.vertices_val, self.vertices_test = None, None, None
@@ -66,7 +65,7 @@ class CardiacMesh(object):
         old_disparity, disparity = 0, 1 # random values
         reference_point_cloud = self.reference_mesh.points # reference to align to
 
-        i = 0
+        it_count = 0
         while abs(old_disparity-disparity)/disparity > 1e-2:
             old_disparity = disparity
             disparity = 0
@@ -79,9 +78,8 @@ class CardiacMesh(object):
                 disparity += _disparity
                 self.all_vertices[i] = np.array(mtx1) if self.procrustes_scaling else np.array(mtx2)
             disparity /= self.all_vertices.shape[0]
-            # old_reference_point_cloud = reference_point_cloud
             reference_point_cloud = self.all_vertices.mean(axis=0)
-            i+=1
+            it_count += 1
         logger.info("Generalized Procrustes analysis performed after %s iterations" % i)
 
 
