@@ -171,8 +171,8 @@ def main(config):
     all_ids = []
     all_subsets = []
 
-    # for i, loader in enumerate([train_loader, val_loader, test_loader]):
-    for i, loader in enumerate([train_loader, val_loader]):
+    for i, loader in enumerate([train_loader, val_loader, test_loader]):
+    # for i, loader in enumerate([train_loader, val_loader]):
         subset = subsets[i]
         all_subsets += [subset] * len(loader.dataset)
         for batch, ids in loader:
