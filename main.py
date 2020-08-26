@@ -1,6 +1,5 @@
 import os
 import torch
-import numpy as np
 import pandas as pd
 import torch.nn.functional as F
 from Logger import logger, timestamp
@@ -8,6 +7,7 @@ from config_parser import read_config
 from model import Coma
 import mesh_operations
 from helpers import *
+import json
 
 
 __author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
@@ -92,10 +92,6 @@ def main(config):
     train_loader = get_loader(dataset.vertices_train, dataset.train_ids, batch_size=batch_size, num_workers=workers_thread, shuffle=True)
     val_loader = get_loader(dataset.vertices_val, dataset.val_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
     test_loader = get_loader(dataset.vertices_test, dataset.test_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
-#    vertices_train = TensorDataset(torch.Tensor(dataset.vertices_train))
-#    train_loader = DataLoader(vertices_train, batch_size=batch_size, shuffle=True, num_workers=workers_thread)
-#    vertices_val = TensorDataset(torch.Tensor(dataset.vertices_val))
-#    val_loader = DataLoader(vertices_val, batch_size=1, shuffle=False, num_workers=workers_thread)
 
     logger.info('Loading CoMA model')
     coma = Coma(config, D_t, U_t, A_t, num_nodes)
@@ -173,18 +169,17 @@ def main(config):
             # TODO: We are duplicating code here. The best would be to change encoder according to is_variational
             batch = batch.to(device)
             if coma.is_variational:
-                # from IPython import embed; embed()
                 mu, log_var = coma.encoder(x=batch)
                 z = coma.sampling(mu, log_var)
             else:
                 z = coma.encoder(x=batch)
 
-            z_df = z_df.append(pd.DataFrame(data=z.detach().numpy(), columns=z_columns))
+            z_df = z_df.append(pd.DataFrame(data=z.cpu().detach().numpy(), columns=z_columns))
             all_ids.extend([str(int(x)) for x in ids.numpy()])
 
             x = coma.decoder(z)
 
-            mse = ((x - batch) ** 2).mean(axis=1).mean(axis=1).detach().numpy()
+            mse = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
             perf_df = perf_df.append(pd.DataFrame(data=mse, columns=["mse"]))
 
     perf_df['ID'] = all_ids
@@ -197,6 +192,10 @@ def main(config):
 
     z_df.to_csv(z_file)
     perf_df.to_csv(perf_file)
+
+    with open("output/%s/config.json" % timestamp, 'w') as fp:
+        config["run_id"] = timestamp
+        json.dump(config, fp)
 
 
 def train(coma, train_loader, optimizer, device):
@@ -212,7 +211,7 @@ def train(coma, train_loader, optimizer, device):
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
             loss = l1_loss + coma.kld_weight * kld_loss
-            print("L1 loss = %s, DKL = %s, Total loss = %s" % (l1_loss, kld_loss, loss))
+            # print("L1 loss = %s, DKL = %s, Total loss = %s" % (l1_loss.item(), kld_loss.item(), loss.item()))
         total_loss += batch_size * loss.item()
         loss.backward()
         optimizer.step()
