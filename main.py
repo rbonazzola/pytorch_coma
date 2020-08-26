@@ -220,11 +220,11 @@ def train(coma, train_loader, optimizer, device):
         batch_size = data.size(0)
         optimizer.zero_grad()
         out = coma(data)
-        l1_loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
+        loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
         if coma.is_variational:
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
-            loss = l1_loss + coma.kld_weight * kld_loss
+            loss += coma.kld_weight * kld_loss
             # print("L1 loss = %s, DKL = %s, Total loss = %s" % (l1_loss.item(), kld_loss.item(), loss.item()))
         total_loss += batch_size * loss.item()
         loss.backward()

@@ -50,7 +50,7 @@ class CardiacMesh(object):
         self.reference_mesh = reference_mesh
         
         self.load_meshes()
-        # self.preprocess_meshes()
+        self.preprocess_meshes()
         self.normalize()
 
         if self.mode == 'training':
