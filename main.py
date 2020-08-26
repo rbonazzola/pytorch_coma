@@ -156,6 +156,7 @@ def main(config):
         if opt == 'sgd':
             adjust_learning_rate(optimizer, lr_decay)
 
+    logging.info("Training finished after %s epochs" % total_epochs)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
@@ -171,6 +172,7 @@ def main(config):
     all_ids = []
     all_subsets = []
 
+    logging.info("Calculating latent representation (z) and reconstruction performance measures.")
     for i, loader in enumerate([train_loader, val_loader, test_loader]):
     # for i, loader in enumerate([train_loader, val_loader]):
         subset = subsets[i]
@@ -206,6 +208,8 @@ def main(config):
     with open("output/%s/config.json" % timestamp, 'w') as fp:
         config["run_id"] = timestamp
         json.dump(config, fp)
+
+    logging.info("Execution finished")
 
 
 def train(coma, train_loader, optimizer, device):
