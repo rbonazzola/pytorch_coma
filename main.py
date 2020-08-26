@@ -45,12 +45,10 @@ def main(config):
 
     # logger.info('%s' % get_current_commit_hash())
 
-    logger.info('Initializing parameters')
 
     checkpoint_dir = config['checkpoint_dir']
-
-    #TODO Put the format_tokens item into the configuration file
     format_tokens = {"TIMESTAMP": timestamp}
+    # TODO Put the format_tokens item into the configuration file
     checkpoint_dir = checkpoint_dir.format(**format_tokens)
 
     output_dir = config['output_dir']
@@ -60,6 +58,18 @@ def main(config):
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+
+    import logging
+    log_file = config.get("log_file", None)
+    if log_file is None:
+        log_file = "output/%s/log" % timestamp
+    file_handler = logging.FileHandler(log_file)
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    # from IPython import embed; embed()
+    logger.info('Initializing parameters')
+
 
     eval_flag = config['eval']
     lr = config['learning_rate']
