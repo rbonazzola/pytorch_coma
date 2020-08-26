@@ -1,20 +1,17 @@
 import glob
 import os
+import re
+import time
 import numpy as np
 import random
-import scipy
-import re
+from scipy.spatial import procrustes
 from Logger import logger
 
 # I rename the class VTKObject as Mesh so I don't have to change the function calls in the original CoMA code
 from VTK.VTKMesh import VTKObject as Mesh  #, MeshViewer, MeshViewers
-import time
 from copy import deepcopy
-import random
-from sklearn.decomposition import PCA
 from tqdm import tqdm # for the progress bar
-import scipy
-from scipy.spatial import procrustes
+
 
 #TODO: Create a class called Mesh and make CardiacMesh inherit from it, adding the specific features of the cardiac mesh into the later.
 
@@ -31,94 +28,108 @@ class CardiacMesh(object):
     }
 
     def __init__(self, nVal, nTraining, meshes_file,
-                 reference_mesh_file, ids_file=None, subpart=None,
-                 procrustes_scaling=False, procrustes_type="generalized"):
+                 reference_mesh, ids_file=None,
+                 subpart=None,
+                 procrustes_scaling=False, procrustes_type="generalized", mode='training', is_normalized=False):
 
-        self.vertices_train, self.vertices_val, self.vertices_test = None, None, None
+
         self.nVal = nVal
         self.nTraining = nTraining
         self.meshes_file = meshes_file
         self.ids_file = ids_file
+        self.is_normalized = is_normalized
 
         self.procrustes_scaling = procrustes_scaling
         self.procrustes_type = procrustes_type
 
         self.N = None # This is just a placeholder now. The actual value will be filled in later.
-        self.n_vertex = None
+        self.n_vertex = None # idem
+        self.num_features = None
+        self.mode = mode
 
-        self.reference_mesh = Mesh(filename=reference_mesh_file) # to extract adjacency matrix
-
-        if subpart is not None:
-            self.reference_mesh = self.reference_mesh.extractSubpart(subpart)
+        self.reference_mesh = reference_mesh
         
         self.load_meshes()
-        self.partition_dataset()
-        self.preprocess_meshes()
+        # self.preprocess_meshes()
         self.normalize()
 
-        self.num_features = self.vertices_train.shape[2]
-
-    def generalized_procrustes(self):
-         
-        logger.info("Performing Procrustes analysis")
-
-        old_disparity, disparity = 0, 1 # random values
-        reference_point_cloud = self.reference_mesh.points # reference to align to
-
-        it_count = 0
-        while abs(old_disparity-disparity)/disparity > 1e-2:
-            old_disparity = disparity
-            disparity = 0
-            for i in range(len(self.all_vertices)):
-                # Docs: https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.procrustes.html
-                mtx1, mtx2, _disparity = procrustes(
-                    self.all_vertices[i],
-                    reference_point_cloud
-                )
-                disparity += _disparity
-                self.all_vertices[i] = np.array(mtx1) if self.procrustes_scaling else np.array(mtx2)
-            disparity /= self.all_vertices.shape[0]
-            reference_point_cloud = self.all_vertices.mean(axis=0)
-            it_count += 1
-        logger.info("Generalized Procrustes analysis performed after %s iterations" % i)
-
-
-    def load_meshes(self):
-
-        ''' Load numpy data files containing mesh data and a list of subject IDs. '''
-
-        self.all_vertices = np.load(self.meshes_file, allow_pickle=True) # training + validation + testing
-        self.ids = [x.strip() for x in open(self.ids_file)]
-
-
-    def partition_dataset(self):
-
-        ''' Partition full dataset into training, testing and validation subsets '''
-
-        self.train_ids = self.ids[:self.nTraining]
-        self.val_ids = self.ids[self.nTraining: (self.nTraining + self.nVal)]
-        self.test_ids = self.ids[(self.nTraining + self.nVal):]
-
-        self.vertices_train = self.all_vertices[:self.nTraining]
-        self.vertices_val = self.all_vertices[self.nTraining:(self.nTraining+self.nVal)]
-        self.vertices_test = self.all_vertices[(self.nTraining+self.nVal):]
-
-        self.n_vertex = self.vertices_train.shape[1]
+        if self.mode == 'training':
+            self.vertices_train, self.vertices_val, self.vertices_test = None, None, None
+            self.partition_dataset()
 
 
     def preprocess_meshes(self):
         self.generalized_procrustes()
 
 
+    def generalized_procrustes(self):
+        logger.info("Performing Procrustes analysis")
+
+        old_disparity, disparity = 0, 1  # random values
+        reference_point_cloud = self.reference_mesh.points  # reference to align to
+
+        it_count = 0
+        while abs(old_disparity - disparity) / disparity > 1e-2:
+            old_disparity = disparity
+            disparity = 0
+            for i in range(len(self.vertices)):
+                # Docs: https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.procrustes.html
+                mtx1, mtx2, _disparity = procrustes(
+                    self.vertices[i],
+                    reference_point_cloud
+                )
+                disparity += _disparity
+                self.vertices[i] = np.array(mtx1) if self.procrustes_scaling else np.array(mtx2)
+            disparity /= self.vertices.shape[0]
+            reference_point_cloud = self.vertices.mean(axis=0)
+            it_count += 1
+
+        logger.info("Generalized Procrustes analysis performed after %s iterations" % it_count)
+
+
+    def load_meshes(self):
+
+        ''' Load numpy data files containing mesh data and a list of subject IDs. '''
+
+        self.vertices = np.load(self.meshes_file, allow_pickle=True) # training + validation + testing
+        self.ids = [x.strip() for x in open(self.ids_file)]
+        self.N, self.n_vertex, self.num_features = self.vertices.shape
+
+
+    def partition_dataset(self):
+
+        ''' Partition full dataset into training, testing and validation subsets '''
+
+        # TODO: Add an option to sample randomly (shuffle)
+        self.train_ids = self.ids[:self.nTraining]
+        self.val_ids = self.ids[self.nTraining: (self.nTraining + self.nVal)]
+        self.test_ids = self.ids[(self.nTraining + self.nVal):]
+
+        #TODO: make this more memory efficient (I am duplicating data here)
+        self.vertices_train = self.vertices[:self.nTraining]
+        self.vertices_val = self.vertices[self.nTraining:(self.nTraining+self.nVal)]
+        self.vertices_test = self.vertices[(self.nTraining+self.nVal):]
+
+        self.n_vertex = self.vertices_train.shape[1]
+
+
     def normalize(self):
         # Mean and std. are computed based on all the samples (not only the training ones). I think this makes sense.
-        self.mean, self.std = np.mean(self.all_vertices, axis=0), np.std(self.all_vertices, axis=0)
-        self.vertices_train = (self.vertices_train - self.mean) / self.std
-        self.vertices_val = (self.vertices_val - self.mean) / self.std
-        self.vertices_test = (self.vertices_test - self.mean) / self.std
-        self.N = self.vertices_train.shape[0] # self.N == self.nTraining
+        # Create self.is_normalized argument and set to True to track normalization status.
+        self.mean, self.std = np.mean(self.vertices, axis=0), np.std(self.vertices, axis=0)
+        self.vertices = (self.vertices - self.mean) / self.std
+        self.is_normalized = True
         logger.info('Vertices normalized')
 
+
+
+    def sample(self, BATCH_SIZE=64):
+        datasamples = np.zeros((BATCH_SIZE, self.vertices_train.shape[1]*self.vertices_train.shape[2]))
+        for i in range(BATCH_SIZE):
+            _randid = random.randint(0, self.N-1)
+            datasamples[i] = ((deepcopy(self.vertices_train[_randid]) - self.mean) / self.std).reshape(-1)
+
+        return datasamples
 
     def vec2mesh(self, vec):
         vec = vec.reshape((self.n_vertex, 3))*self.std + self.mean
@@ -137,16 +148,6 @@ class CardiacMesh(object):
             viewer.dynamic_meshes = [Mesh(v=self.vertices_train[ids[i+1]], f=self.reference_mesh.f)]
             time.sleep(0.5)    # pause 0.5 seconds
         return 0
-
-
-    def sample(self, BATCH_SIZE=64):
-        datasamples = np.zeros((BATCH_SIZE, self.vertices_train.shape[1]*self.vertices_train.shape[2]))
-        for i in range(BATCH_SIZE):
-            _randid = random.randint(0, self.N-1)
-            datasamples[i] = ((deepcopy(self.vertices_train[_randid]) - self.mean) / self.std).reshape(-1)
-
-        return datasamples
-
 
     def save_meshes(self, filename, meshes):
         for i in range(meshes.shape[0]):
@@ -200,7 +201,7 @@ class NumpyFromVTKs(object):
         
         self.partition_ids = partition_ids
         self.N_subj = N_subj
-        self.subj_ids = subj_ids 
+        self.subj_ids = subj_ids
 
         self.gather_paths()
         self.vertices = self.gather_data()

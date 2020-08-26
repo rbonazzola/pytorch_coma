@@ -87,7 +87,7 @@ def read_config(fname):
 
     self['activation_function'] = config.get('Model Parameters', 'activation_function') # TODO: add this option into the scripts
     self['reconstruction_loss'] = config.get('Model Parameters', 'reconstruction_loss') # TODO: add this option into the scripts
-    self['kld_weight'] = config.get('Model Parameters', 'kld_weight')       # TODO: add this option into the scripts
+    self['kld_weight'] = config.getfloat('Model Parameters', 'kld_weight')       # TODO: add this option into the scripts
 
     self['weight_loss'] = config.get('Model Parameters', 'weight_loss')                 # TODO: add this option into the scripts
 
@@ -125,6 +125,9 @@ class Config:
 
     def __init__(self, config_fname):
 
+        raise NotImplementedError
+
+        #TODO: finish this and replace the current approach
         config = configparser.RawConfigParser()
         config.read(config_fname)
 
