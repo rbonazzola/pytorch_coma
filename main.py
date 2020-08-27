@@ -172,8 +172,9 @@ def main(config):
     all_subsets = []
 
     logging.info("Calculating latent representation (z) and reconstruction performance measures.")
-    for i, loader in enumerate([train_loader, val_loader, test_loader]):
+
     # for i, loader in enumerate([train_loader, val_loader]):
+    for i, loader in enumerate([train_loader, val_loader, test_loader]):
         subset = subsets[i]
         all_subsets += [subset] * len(loader.dataset)
         for batch, ids in loader:
@@ -213,6 +214,11 @@ def main(config):
 
     logging.info("Execution finished")
 
+    # This a temporary (i.e. permanent) workaround
+    from subprocess import call
+    import shlex
+    call(shlex.split("touch output/%s/.finished" % timestamp))
+
 
 def train(coma, train_loader, optimizer, device):
     coma.train()
@@ -248,7 +254,12 @@ def evaluate(coma, test_loader, device):
     for i, (data, ids) in enumerate(test_loader):
         data = data.to(device)
         with torch.no_grad():
-            out = coma(data)
+            if coma.is_variational:
+                mu, log_var = coma.encoder(x=data)
+                z = mu # coma.sampling(mu, log_var)
+            else:
+                z = coma.encoder(x=data)
+            out = coma.decoder(z)
         loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
         total_loss += data.size(0) * loss.item()
     return total_loss/len(test_loader.dataset)
