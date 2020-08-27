@@ -43,7 +43,7 @@ def main(config):
     #TODO: Print the library versions
     #TODO: Print the hashes of the data files
 
-    # logger.info('%s' % get_current_commit_hash())
+    logger.info('Current Git commit hash for repository pytorch_coma: %s' % get_current_commit_hash())
 
 
     checkpoint_dir = config['checkpoint_dir']
@@ -67,10 +67,8 @@ def main(config):
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-    # from IPython import embed; embed()
+
     logger.info('Initializing parameters')
-
-
     eval_flag = config['eval']
     lr = config['learning_rate']
     lr_decay = config['learning_rate_decay']
@@ -142,9 +140,10 @@ def main(config):
     for epoch in range(start_epoch, total_epochs + 1):
 
         logger.info("Training for epoch %s" % epoch)
-        train_loss = train(coma, train_loader, optimizer, device)
+        train_loss, recon_loss, kld_loss = train(coma, train_loader, optimizer, device)
+
         val_loss = evaluate(coma, val_loader, device)
-        logger.info('  Train loss %s, Val loss %s' % (train_loss, val_loss))
+        logger.info('  Train loss %s (%s + %s), Val loss %s' % (train_loss, recon_loss, kld_loss, val_loss))
 
         if val_loss < best_val_loss:
             save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir)
@@ -182,7 +181,7 @@ def main(config):
             batch = batch.to(device)
             if coma.is_variational:
                 mu, log_var = coma.encoder(x=batch)
-                z = coma.sampling(mu, log_var)
+                z = mu # coma.sampling(mu, log_var)
             else:
                 z = coma.encoder(x=batch)
 
@@ -192,6 +191,9 @@ def main(config):
             x = coma.decoder(z)
 
             mse = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
+
+            # batch = batch[torch.randperm(len(batch)), :, :]
+            # mse_shuffled = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
             perf_df = perf_df.append(pd.DataFrame(data=mse, columns=["mse"]))
 
     perf_df['ID'] = all_ids
@@ -215,21 +217,29 @@ def main(config):
 def train(coma, train_loader, optimizer, device):
     coma.train()
     total_loss = 0
+    total_kld_loss = 0
+    total_recon_loss = 0
     for i, (data, ids) in enumerate(train_loader):
         data = data.to(device)
         batch_size = data.size(0)
         optimizer.zero_grad()
         out = coma(data)
-        loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
+        recon_loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
+        total_recon_loss += batch_size * recon_loss.item()
+        loss = recon_loss
         if coma.is_variational:
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
             loss += coma.kld_weight * kld_loss
+            total_kld_loss += batch_size * coma.kld_weight * kld_loss.item()
             # print("L1 loss = %s, DKL = %s, Total loss = %s" % (l1_loss.item(), kld_loss.item(), loss.item()))
         total_loss += batch_size * loss.item()
         loss.backward()
         optimizer.step()
-    return total_loss / len(train_loader.dataset)
+
+    return total_loss / len(train_loader.dataset), \
+           total_recon_loss / len(train_loader.dataset), \
+           total_kld_loss / len(train_loader.dataset)
 
 
 def evaluate(coma, test_loader, device):

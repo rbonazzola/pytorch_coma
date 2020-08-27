@@ -2,6 +2,8 @@ import torch
 from VTK.VTKMesh import VTKObject as Mesh
 from cardiac_mesh import CardiacMesh
 from torch.utils.data import TensorDataset, DataLoader
+from subprocess import check_output
+import shlex
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -50,7 +52,7 @@ def get_cardiac_dataset_len(config):
     return shape
 
 def get_current_commit_hash():
-    return check_output(shlex.split("git rev-parse HEAD")).strip()
+    return check_output(shlex.split("git rev-parse HEAD")).decode().strip()
 
 class MyDataset(TensorDataset):
     def __init__(self, dataset1, dataset2):
