@@ -69,6 +69,15 @@ class MyDataset(TensorDataset):
         return len(self.dataset1)
 
 def get_loader(dataset, ids, batch_size, num_workers, shuffle=True):
-    vertices = MyDataset(torch.Tensor(dataset), torch.Tensor([int(x) for x in ids]) )
+    '''
+    :param dataset:
+    :param ids:
+    :param batch_size:
+    :param num_workers:
+    :param shuffle:
+    :return:
+    '''
+    ids = torch.Tensor([int(x) for x in ids])
+    vertices = MyDataset(torch.Tensor(dataset), ids)
     loader = DataLoader(vertices, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
     return loader

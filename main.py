@@ -37,6 +37,19 @@ def load_pretrained_model(config, checkpoint="last"):
     raise NotImplementedError
 
 
+def save_training_info(loss_info):
+    """
+    :param loss_info: list of lists, containing six elements per "row" (the different losses), and one row per epoch
+    :return:
+    """
+    column_names = ["epoch", "reconstruction_loss_training", "KLD_loss_training", "loss_training", "reconstruction_loss_eval", "KLD_loss_eval", "loss_eval"]
+    with open("output/%s/training_losses.csv" % timestamp, "w") as handle:
+        handle.write("%s\n" % ",".join(column_names))
+        for row in loss_info:
+            handle.write("%s\n" % ( ",".join(["%d"] + ["%.5f"]*(len(row)-1)) % tuple(row) ) )
+
+
+
 def main(config):
 
     #TODO: Print the commit hashes of all the repositories used (this, VTK, psbody)
@@ -44,7 +57,6 @@ def main(config):
     #TODO: Print the hashes of the data files
 
     logger.info('Current Git commit hash for repository pytorch_coma: %s' % get_current_commit_hash())
-
 
     checkpoint_dir = config['checkpoint_dir']
     format_tokens = {"TIMESTAMP": timestamp}
@@ -112,14 +124,15 @@ def main(config):
     else:
         raise Exception('No optimizer provided')
 
-    # To continue from a previous run
+    # To continue from a previous run saved in checkpoint_file
     checkpoint_file = config['checkpoint_file']
     if checkpoint_file:
+        logging.info("Resuming training from previous execution: %s" % checkpoint_file)
         checkpoint = torch.load(checkpoint_file)
         start_epoch = checkpoint['epoch_num']
         coma.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-        # To find if this is fixed in pytorch
+        # To find if this is fixed in pytorch # <<-- What does this comment mean? Did I make it?
         for state in optimizer.state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
@@ -129,38 +142,61 @@ def main(config):
 
     coma.to(device)
 
+    with open("output/%s/config.json" % timestamp, 'w') as fp:
+        config["run_id"] = timestamp
+        json.dump(config, fp, indent=4)
+
     if eval_flag:
         val_loss = evaluate(coma, val_loader, device)
         logger.info('val loss', val_loss)
         return
 
     best_val_loss = float('inf')
-    val_loss_history = []
+    loss_history = []
 
     for epoch in range(start_epoch, total_epochs + 1):
 
-        logger.info("Training for epoch %s" % epoch)
-        train_loss, recon_loss, kld_loss = train(coma, train_loader, optimizer, device)
+        # logger.info("Training for epoch %s" % epoch)
+        loss_t, recon_loss_t, kld_loss_t = train(coma, train_loader, optimizer, device)
 
-        val_loss = evaluate(coma, val_loader, device)
-        logger.info('  Train loss %s (%s + %s), Val loss %s' % (train_loss, recon_loss, kld_loss, val_loss))
+        loss_ev, recon_loss_ev, kld_loss_ev = evaluate(coma, val_loader, device)
 
-        if val_loss < best_val_loss:
-            save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir)
-            best_val_loss = val_loss
+        logger.info('Epoch %d/%d  Reconstruction loss + KL loss: %.5f + %.5f = %.5f (training), %.5f + %.5f = %.5f (evaluation)' %
+           (epoch, total_epochs,
+            recon_loss_t, kld_loss_t, loss_t,
+            recon_loss_ev, kld_loss_ev, loss_ev
+           )
+        )
+        loss_history.append([epoch+1, recon_loss_t, kld_loss_t, loss_t, recon_loss_ev, kld_loss_ev, loss_ev])
 
-        val_loss_history.append(val_loss)
-        # val_losses.append(best_val_loss)
+        save_model(coma, optimizer, epoch, loss_t, loss_ev, checkpoint_dir)
+
+        if loss_ev < best_val_loss:
+            best_val_loss = loss_ev
+            best_epoch = epoch
+            best_model = coma
 
         if opt == 'sgd':
             adjust_learning_rate(optimizer, lr_decay)
 
+    save_training_info(loss_history)
     logging.info("Training finished after %s epochs" % total_epochs)
+    logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
+
+    #TODO: change
+    logging.info("Saving best model state in output/%s/best_model.pkl" % timestamp)
+    torch.save(best_model.state_dict(), "output/%s/best_model.pkl" % timestamp)
+
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
+    #TODO: replace path for field in config
+    logging.info("Saving last model state...")
+    torch.save(coma.state_dict(), "output/%s/last_model.pkl" % timestamp)
+
     # Change this to use the Experiment class.
     coma.eval()
+    torch.no_grad()
     z_file = "output/%s/latent_space.csv" % timestamp
     perf_file = "output/%s/performance.csv" % timestamp
     z_columns = ["z" + str(i) for i in range(coma.z)]
@@ -173,8 +209,8 @@ def main(config):
 
     logging.info("Calculating latent representation (z) and reconstruction performance measures.")
 
-    # for i, loader in enumerate([train_loader, val_loader]):
-    for i, loader in enumerate([train_loader, val_loader, test_loader]):
+    for i, loader in enumerate([train_loader, val_loader]):
+    # for i, loader in enumerate([train_loader, val_loader, test_loader]):
         subset = subsets[i]
         all_subsets += [subset] * len(loader.dataset)
         for batch, ids in loader:
@@ -208,24 +244,20 @@ def main(config):
     z_df.to_csv(z_file)
     perf_df.to_csv(perf_file)
 
-    with open("output/%s/config.json" % timestamp, 'w') as fp:
-        config["run_id"] = timestamp
-        json.dump(config, fp)
-
     logging.info("Execution finished")
 
-    # This a temporary (i.e. permanent) workaround
+    # This a temporary (i.e. permanent) workaround to indicate that the execution finished
     from subprocess import call
     import shlex
     call(shlex.split("touch output/%s/.finished" % timestamp))
 
 
-def train(coma, train_loader, optimizer, device):
+def train(coma, dataloader, optimizer, device):
     coma.train()
     total_loss = 0
     total_kld_loss = 0
     total_recon_loss = 0
-    for i, (data, ids) in enumerate(train_loader):
+    for i, (data, ids) in enumerate(dataloader):
         data = data.to(device)
         batch_size = data.size(0)
         optimizer.zero_grad()
@@ -238,32 +270,43 @@ def train(coma, train_loader, optimizer, device):
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
             loss += coma.kld_weight * kld_loss
             total_kld_loss += batch_size * coma.kld_weight * kld_loss.item()
-            # print("L1 loss = %s, DKL = %s, Total loss = %s" % (l1_loss.item(), kld_loss.item(), loss.item()))
         total_loss += batch_size * loss.item()
         loss.backward()
         optimizer.step()
 
-    return total_loss / len(train_loader.dataset), \
-           total_recon_loss / len(train_loader.dataset), \
-           total_kld_loss / len(train_loader.dataset)
+    return total_loss / len(dataloader.dataset), \
+           total_recon_loss / len(dataloader.dataset), \
+           total_kld_loss / len(dataloader.dataset)
 
 
-def evaluate(coma, test_loader, device):
+def evaluate(coma, dataloader, device):
+    #TODO: compress train and evaluate into one function with "training" and "evaluate" modes
     coma.eval()
     total_loss = 0
-    for i, (data, ids) in enumerate(test_loader):
+    total_kld_loss = 0
+    total_recon_loss = 0
+    for i, (data, ids) in enumerate(dataloader):
         data = data.to(device)
+        batch_size = data.size(0)
         with torch.no_grad():
             if coma.is_variational:
                 mu, log_var = coma.encoder(x=data)
                 z = mu # coma.sampling(mu, log_var)
+                # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
+                kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
+                loss = coma.kld_weight * kld_loss
+                total_kld_loss += batch_size * coma.kld_weight * kld_loss.item()
             else:
                 z = coma.encoder(x=data)
             out = coma.decoder(z)
-        loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
-        total_loss += data.size(0) * loss.item()
-    return total_loss/len(test_loader.dataset)
+            recon_loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
+            total_recon_loss += batch_size * recon_loss.item()
+            loss += recon_loss
+            total_loss += batch_size * loss.item()
 
+    return total_loss / len(dataloader.dataset), \
+           total_recon_loss / len(dataloader.dataset), \
+           total_kld_loss / len(dataloader.dataset)
 
 
 if __name__ == '__main__':
@@ -276,6 +319,7 @@ if __name__ == '__main__':
     parser.add_argument('-cp', '--checkpoint_dir', default=None, help='path where checkpoints file need to be stored')
     parser.add_argument('-od', '--output_dir', default=None, help='path where to store output')
     parser.add_argument('-id', '--data_dir', default=None, help='path where to fetch input data from')
+    parser.add_argument('--test', default=False, action="store_true", help='I')
 
     args = parser.parse_args()
 
@@ -298,5 +342,8 @@ if __name__ == '__main__':
 
     if args.output_dir:
         config['output_dir'] = args.output_dir
+
+    if args.test:
+        config['comments'] = "test"
 
     main(config)
