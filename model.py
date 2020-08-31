@@ -2,6 +2,8 @@ import torch
 import torch.nn.functional as F
 from layers import ChebConv_Coma, Pool
 
+__author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
+
 class Coma(torch.nn.Module):
 
     def __init__(self, config, downsample_matrices, upsample_matrices, adjacency_matrices, num_nodes):

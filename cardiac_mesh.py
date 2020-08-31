@@ -12,6 +12,7 @@ from VTK.VTKMesh import VTKObject as Mesh  #, MeshViewer, MeshViewers
 from copy import deepcopy
 from tqdm import tqdm # for the progress bar
 
+__author__ = "Rodrigo Bonazzola"
 
 #TODO: Create a class called Mesh and make CardiacMesh inherit from it, adding the specific features of the cardiac mesh into the later.
 

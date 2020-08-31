@@ -364,7 +364,7 @@ if __name__ == '__main__':
         config['comments'] = "this is a test"
         config['nTraining'] = 32
         config['nVal'] = 80
-        config['epoch'] = 10
+        config['epoch'] = 3
     config['test'] = args.test
 
     main(config)

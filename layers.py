@@ -6,6 +6,8 @@ from torch_geometric.utils import remove_self_loops
 
 from utils import normal
 
+__author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
+
 # N: number of subjects (or, equivalently, meshes)
 # M: number of vertices in mesh
 # F: number of features (typically, 3: x, y and z)
