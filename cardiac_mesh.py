@@ -27,33 +27,41 @@ class CardiacMesh(object):
         "RA": [5],
     }
 
-    def __init__(self, nVal, nTraining, meshes_file,
+    def __init__(self, meshes_file,
                  reference_mesh, ids_file=None,
+                 nVal=None, nTraining=None,
                  subpart=None,
+                 procrustes_aligned = False,
                  procrustes_scaling=False, procrustes_type="generalized", mode='training', is_normalized=False):
 
+        #TODO: add a mesh_partition argument in case the mesh has to be partitioned e.g. for cardiac chamber.
 
-        self.nVal = nVal
-        self.nTraining = nTraining
-        self.meshes_file = meshes_file
-        self.ids_file = ids_file
+        self.__meshes_file = meshes_file
+        self.__ids_file = ids_file
         self.is_normalized = is_normalized
 
+        self.procrustes_aligned = procrustes_aligned # Flag to indicate if the mesh set is already aligned
         self.procrustes_scaling = procrustes_scaling
         self.procrustes_type = procrustes_type
 
-        self.N = None # This is just a placeholder now. The actual value will be filled in later.
-        self.n_vertex = None # idem
-        self.num_features = None
-        self.mode = mode
+        # self.N = None # This is just a placeholder now. The actual value will be filled in later.
+        # self.n_vertex = None # idem
+        # self.num_features = None
+        self.__mode = mode # Training or testing
 
         self.reference_mesh = reference_mesh
         
         self.load_meshes()
-        self.preprocess_meshes()
-        self.normalize()
 
-        if self.mode == 'training':
+        if not self.procrustes_aligned:
+            self.preprocess_meshes()
+
+        if not self.is_normalized:
+            self.normalize()
+
+        if self.__mode == 'training':
+            self.nVal = nVal
+            self.nTraining = nTraining
             self.vertices_train, self.vertices_val, self.vertices_test = None, None, None
             self.partition_dataset()
 
@@ -84,6 +92,7 @@ class CardiacMesh(object):
             reference_point_cloud = self.vertices.mean(axis=0)
             it_count += 1
 
+        self.procrustes_aligned = True
         logger.info("Generalized Procrustes analysis performed after %s iterations" % it_count)
 
 
@@ -91,8 +100,8 @@ class CardiacMesh(object):
 
         ''' Load numpy data files containing mesh data and a list of subject IDs. '''
 
-        self.vertices = np.load(self.meshes_file, allow_pickle=True) # training + validation + testing
-        self.ids = [x.strip() for x in open(self.ids_file)]
+        self.vertices = np.load(self.__meshes_file, allow_pickle=True) # training + validation + testing
+        self.ids = [x.strip() for x in open(self.__ids_file)]
         self.N, self.n_vertex, self.num_features = self.vertices.shape
 
 
@@ -110,7 +119,7 @@ class CardiacMesh(object):
         self.vertices_val = self.vertices[self.nTraining:(self.nTraining+self.nVal)]
         self.vertices_test = self.vertices[(self.nTraining+self.nVal):]
 
-        self.n_vertex = self.vertices_train.shape[1]
+        # self.n_vertex = self.vertices_train.shape[1]
 
 
     def normalize(self):

@@ -54,6 +54,7 @@ def get_cardiac_dataset_len(config):
 def get_current_commit_hash():
     return check_output(shlex.split("git rev-parse HEAD")).decode().strip()
 
+#TODO: create a class
 class MyDataset(TensorDataset):
     def __init__(self, dataset1, dataset2):
         self.dataset1 = dataset1 # datasets should be sorted!

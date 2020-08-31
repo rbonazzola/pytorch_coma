@@ -9,7 +9,6 @@ import mesh_operations
 from helpers import *
 import json
 
-
 __author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
 
 def adjust_learning_rate(optimizer, lr_decay):
@@ -42,6 +41,7 @@ def save_training_info(loss_info):
     :param loss_info: list of lists, containing six elements per "row" (the different losses), and one row per epoch
     :return:
     """
+    #TODO: use a Pandas DataFrame for this
     column_names = ["epoch", "reconstruction_loss_training", "KLD_loss_training", "loss_training", "reconstruction_loss_eval", "KLD_loss_eval", "loss_eval"]
     with open("output/%s/training_losses.csv" % timestamp, "w") as handle:
         handle.write("%s\n" % ",".join(column_names))
@@ -49,8 +49,20 @@ def save_training_info(loss_info):
             handle.write("%s\n" % ( ",".join(["%d"] + ["%.5f"]*(len(row)-1)) % tuple(row) ) )
 
 
+def log_loss_info(losses, nepochs):
+    losses.insert(1, nepochs) # include total number of epochs to the logged message
+    logger.info(
+        'Epoch {:d}/{:d}:  L1 loss + KL loss = Total Loss\n'
+        '\tTrain set:\t {:.5f} + {:.5f} = {:.5f},\n'
+        '\tValidation set:\t {:.5f} + {:.5f} = {:.5f}'
+        .format(*losses)
+    )
+
 
 def main(config):
+
+    #This function is too long!
+    #TODO: Use the Experiment class to modularize the different steps
 
     #TODO: Print the commit hashes of all the repositories used (this, VTK, psbody)
     #TODO: Print the library versions
@@ -60,7 +72,7 @@ def main(config):
 
     checkpoint_dir = config['checkpoint_dir']
     format_tokens = {"TIMESTAMP": timestamp}
-    # TODO Put the format_tokens item into the configuration file
+    #TODO: Put the format_tokens item into the configuration file
     checkpoint_dir = checkpoint_dir.format(**format_tokens)
 
     output_dir = config['output_dir']
@@ -75,6 +87,7 @@ def main(config):
     log_file = config.get("log_file", None)
     if log_file is None:
         log_file = "output/%s/log" % timestamp
+
     file_handler = logging.FileHandler(log_file)
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     file_handler.setFormatter(formatter)
@@ -89,13 +102,14 @@ def main(config):
     workers_thread = config['workers_thread']
     opt = config['optimizer']
     batch_size = config['batch_size']
-    # val_losses, accs, durations = [], [], []
+    is_this_a_test = config['test']
 
     device = get_device()
 
     logger.info('Loading template mesh from %s' % config['template_fname'])
     template_mesh = get_template_mesh(config) # Used to extract the connectivity between vertices
 
+    #TODO: Put this into a separate function
     logger.info('Generating transform matrices')
     # - A: adjacency matrices
     # - D: downsampling matrices
@@ -107,16 +121,21 @@ def main(config):
     num_nodes = [len(M[i].v) for i in range(len(M))]
 
     logger.info('Loading dataset')
+    #TODO important: make the partition random.
     dataset = load_cardiac_dataset(config)
+
     logger.info("Using %s meshes for training and %s for validation." % (dataset.nTraining, dataset.nVal))
+    #TODO: I don't like the way I'm partitioning the data
     train_loader = get_loader(dataset.vertices_train, dataset.train_ids, batch_size=batch_size, num_workers=workers_thread, shuffle=True)
     val_loader = get_loader(dataset.vertices_val, dataset.val_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
     test_loader = get_loader(dataset.vertices_test, dataset.test_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
 
     logger.info('Loading CoMA model')
+    #TODO: print architecture of the network
     coma = Coma(config, D_t, U_t, A_t, num_nodes)
 
     #TODO: Use a dictionary to map the configuration parameters to this behaviour
+    #TODO: print configuration of the optimizer in the logs
     if opt == 'adam':
         optimizer = torch.optim.Adam(coma.parameters(), lr=lr, weight_decay=weight_decay)
     elif opt == 'sgd':
@@ -142,6 +161,7 @@ def main(config):
 
     coma.to(device)
 
+    #TODO: change path for parameter in config
     with open("output/%s/config.json" % timestamp, 'w') as fp:
         config["run_id"] = timestamp
         json.dump(config, fp, indent=4)
@@ -158,19 +178,14 @@ def main(config):
 
         # logger.info("Training for epoch %s" % epoch)
         loss_t, recon_loss_t, kld_loss_t = train(coma, train_loader, optimizer, device)
-
         loss_ev, recon_loss_ev, kld_loss_ev = evaluate(coma, val_loader, device)
-
-        logger.info('Epoch %d/%d  Reconstruction loss + KL loss: %.5f + %.5f = %.5f (training), %.5f + %.5f = %.5f (evaluation)' %
-           (epoch, total_epochs,
-            recon_loss_t, kld_loss_t, loss_t,
-            recon_loss_ev, kld_loss_ev, loss_ev
-           )
-        )
-        loss_history.append([epoch+1, recon_loss_t, kld_loss_t, loss_t, recon_loss_ev, kld_loss_ev, loss_ev])
+        loss_history.append([epoch, recon_loss_t, kld_loss_t, loss_t, recon_loss_ev, kld_loss_ev, loss_ev])
+        # TODO: improve the logging here.
+        log_loss_info(loss_history[-1], total_epochs)
 
         save_model(coma, optimizer, epoch, loss_t, loss_ev, checkpoint_dir)
 
+        # To get the best run in the evaluation subset.
         if loss_ev < best_val_loss:
             best_val_loss = loss_ev
             best_epoch = epoch
@@ -204,13 +219,13 @@ def main(config):
     perf_df = pd.DataFrame(None, columns=["mse"])
 
     subsets = ["train", "validation", "test"]
+    loader_list = [train_loader, val_loader] if is_this_a_test else [train_loader, val_loader, test_loader]
     all_ids = []
     all_subsets = []
 
     logging.info("Calculating latent representation (z) and reconstruction performance measures.")
 
-    for i, loader in enumerate([train_loader, val_loader]):
-    # for i, loader in enumerate([train_loader, val_loader, test_loader]):
+    for i, loader in enumerate(loader_list):
         subset = subsets[i]
         all_subsets += [subset] * len(loader.dataset)
         for batch, ids in loader:
@@ -218,7 +233,7 @@ def main(config):
             batch = batch.to(device)
             if coma.is_variational:
                 mu, log_var = coma.encoder(x=batch)
-                z = mu # coma.sampling(mu, log_var)
+                z = mu
             else:
                 z = coma.encoder(x=batch)
 
@@ -230,6 +245,7 @@ def main(config):
             mse = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
 
             # batch = batch[torch.randperm(len(batch)), :, :]
+            #TODO: it's important to report MSE using shuffled data, for reference.
             # mse_shuffled = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
             perf_df = perf_df.append(pd.DataFrame(data=mse, columns=["mse"]))
 
@@ -280,7 +296,7 @@ def train(coma, dataloader, optimizer, device):
 
 
 def evaluate(coma, dataloader, device):
-    #TODO: compress train and evaluate into one function with "training" and "evaluate" modes
+    #TODO: condense train and evaluate into a single function with "training" and "evaluate" modes
     coma.eval()
     total_loss = 0
     total_kld_loss = 0
@@ -319,7 +335,7 @@ if __name__ == '__main__':
     parser.add_argument('-cp', '--checkpoint_dir', default=None, help='path where checkpoints file need to be stored')
     parser.add_argument('-od', '--output_dir', default=None, help='path where to store output')
     parser.add_argument('-id', '--data_dir', default=None, help='path where to fetch input data from')
-    parser.add_argument('--test', default=False, action="store_true", help='I')
+    parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly.')
 
     args = parser.parse_args()
 
@@ -329,7 +345,7 @@ if __name__ == '__main__':
               'it from current directory', args.conf)
 
     ################################################################################
-    ### Read configuration
+    ### Load configuration
     if not os.path.exists(args.conf):
         logger.error('Config not found' + args.conf)
     config = read_config(args.conf)
@@ -344,6 +360,11 @@ if __name__ == '__main__':
         config['output_dir'] = args.output_dir
 
     if args.test:
-        config['comments'] = "test"
+        # some small values so that the execution ends quickly
+        config['comments'] = "this is a test"
+        config['nTraining'] = 32
+        config['nVal'] = 80
+        config['epoch'] = 10
+    config['test'] = args.test
 
     main(config)
