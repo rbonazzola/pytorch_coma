@@ -10,6 +10,7 @@ def set_default_parameters(config):
     config.add_section('Input Output')
     config.set('Input Output', 'visualize', 'False')
     config.set('Input Output', 'data_dir', 'data/meshes/numpy_files/LV_all_subjects/train.npy')
+    config.set('Input Output', 'preprocessed_data', 'data/meshes/numpy_files/LV_all_subjects/LV_GPA_meshes.pkl')
     config.set('Input Output', 'checkpoint_dir', 'output/checkpoints/{TIMESTAMP}')
     config.set('Input Output', 'visual_output_dir', '')
     config.set('Input Output', 'template_fname', './template/template.vtk')
@@ -65,6 +66,7 @@ def read_config(fname):
     self = {}
     self['visualize'] = config.getboolean('Input Output', 'visualize')
     self['data_dir'] = config.get('Input Output', 'data_dir')
+    self['preprocessed_data'] = config.get('Input Output', 'preprocessed_data')
     self['checkpoint_dir'] = config.get('Input Output', 'checkpoint_dir')
     self['template_fname'] = config.get('Input Output', 'template_fname')
     self['visual_output_dir'] = config.get('Input Output', 'visual_output_dir')
@@ -104,6 +106,9 @@ def read_config(fname):
     self['label'] = config.get('Additional', 'label')                                   # TODO: add this option into the scripts
 
     return self
+
+def read_default_config():
+    return read_config("config_files/default.cfg")
 
 def save_config(config, filename):
 

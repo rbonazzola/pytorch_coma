@@ -4,6 +4,7 @@ from cardiac_mesh import CardiacMesh
 from torch.utils.data import TensorDataset, DataLoader
 from subprocess import check_output
 import shlex
+import pickle
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')

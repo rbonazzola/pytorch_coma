@@ -3,7 +3,7 @@ from cardiac_mesh import CardiacMesh
 from config_parser import read_config
 from helpers import get_template_mesh
 
-config = read_config("config_files/default.cfg")
+config = read_default_config()
 
 dataset = CardiacMesh(
   meshes_file=config['data_dir'],
@@ -14,4 +14,4 @@ dataset = CardiacMesh(
   mode="validation"
 )
 
-pickle.dump(dataset, open("data/meshes/numpy_files/LV_all_subjects/LV_GPA_meshes.pkl", "wb"))
+pickle.dump(dataset, open(config['preprocessed_data'], "wb"))
