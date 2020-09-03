@@ -4,6 +4,7 @@ from helpers import *
 import json
 import mesh_operations
 import re
+import pandas as pd
 
 class Experiment():
 
@@ -94,11 +95,11 @@ class ComaExperiment(Experiment):
 
     def load_z(self):
         # raise NotImplementedError
-        return pd.read_csv(self.__z)
+        return pd.read_csv(os.path.join(self.__run_dir, self.__z))
 
     def load_perf(self):
         # raise NotImplementedError
-        return pd.read_csv(self.__performance)
+        return pd.read_csv(os.path.join(self.__run_dir, self.__performance))
 
     def write_config(self):
         raise NotImplementedError
@@ -133,3 +134,6 @@ class ComaExperiment(Experiment):
         open(self.__train_id_file, "w").write("\n".join([str(x) for x in cardiac_data.train_ids]))
         open(self.__val_id_file, "w").write("\n".join([str(x) for x in cardiac_data.val_ids]))
         open(self.__test_id_file, "w").write("\n".join([str(x) for x in cardiac_data.test_ids]))
+
+    def __enter__(self):
+        return self

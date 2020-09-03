@@ -11,10 +11,9 @@ def set_default_parameters(config):
     config.set('Input Output', 'visualize', 'False')
     config.set('Input Output', 'data_dir', 'data/meshes/numpy_files/LV_all_subjects/train.npy')
     config.set('Input Output', 'preprocessed_data', 'data/meshes/numpy_files/LV_all_subjects/LV_GPA_meshes.pkl')
-    config.set('Input Output', 'checkpoint_dir', 'output/checkpoints/{TIMESTAMP}')
     config.set('Input Output', 'visual_output_dir', '')
     config.set('Input Output', 'template_fname', './template/template.vtk')
-    config.set('Input Output', 'output_dir', 'output')
+    config.set('Input Output', 'output_dir', 'output/{TIMESTAMP}')
     config.set('Input Output', 'ids_file', 'data/meshes/numpy_files/LV_all_subjects/LVED_all_subjects_subj_ids.txt') # TODO: add these options into the scripts
     config.set('Input Output', 'partition', 'LV')
 
@@ -67,7 +66,6 @@ def read_config(fname):
     self['visualize'] = config.getboolean('Input Output', 'visualize')
     self['data_dir'] = config.get('Input Output', 'data_dir')
     self['preprocessed_data'] = config.get('Input Output', 'preprocessed_data')
-    self['checkpoint_dir'] = config.get('Input Output', 'checkpoint_dir')
     self['template_fname'] = config.get('Input Output', 'template_fname')
     self['visual_output_dir'] = config.get('Input Output', 'visual_output_dir')
     self['output_dir'] = config.get('Input Output', 'output_dir')
@@ -117,14 +115,19 @@ def save_config(config, filename):
         config.write(configfile)
         configfile.close()
 
+
 if __name__ == '__main__':
 
     pkg_path, _ = os.path.split(os.path.realpath(__file__))
+
+    if not os.path.exists("config_files"):
+        os.makedirs("config_files")
     config_fname = os.path.join(pkg_path, 'config_files/default.cfg')
     config = configparser.RawConfigParser()
     set_default_parameters(config)
 
     save_config(config, config_fname)
+
 
 class Config:
 

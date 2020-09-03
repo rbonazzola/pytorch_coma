@@ -36,14 +36,14 @@ def load_pretrained_model(config, checkpoint="last"):
     raise NotImplementedError
 
 
-def save_training_info(loss_info):
+def save_training_info(loss_info, filename):
     """
     :param loss_info: list of lists, containing six elements per "row" (the different losses), and one row per epoch
     :return:
     """
     #TODO: use a Pandas DataFrame for this
     column_names = ["epoch", "reconstruction_loss_training", "KLD_loss_training", "loss_training", "reconstruction_loss_eval", "KLD_loss_eval", "loss_eval"]
-    with open("output/%s/training_losses.csv" % timestamp, "w") as handle:
+    with open(filename, "w") as handle:
         handle.write("%s\n" % ",".join(column_names))
         for row in loss_info:
             handle.write("%s\n" % ( ",".join(["%d"] + ["%.5f"]*(len(row)-1)) % tuple(row) ) )
@@ -70,23 +70,22 @@ def main(config):
 
     logger.info('Current Git commit hash for repository pytorch_coma: %s' % get_current_commit_hash())
 
-    checkpoint_dir = config['checkpoint_dir']
+    output_dir = config['output_dir']
     format_tokens = {"TIMESTAMP": timestamp}
     #TODO: Put the format_tokens item into the configuration file
-    checkpoint_dir = checkpoint_dir.format(**format_tokens)
-
-    output_dir = config['output_dir']
-
-    if not os.path.exists(checkpoint_dir):
-        os.makedirs(checkpoint_dir)
+    output_dir = output_dir.format(**format_tokens)
+    checkpoint_dir = os.path.join(output_dir, "checkpoints")
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+
     import logging
     log_file = config.get("log_file", None)
     if log_file is None:
-        log_file = "output/%s/log" % timestamp
+        log_file = "{}/log".format(output_dir)
 
     file_handler = logging.FileHandler(log_file)
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
@@ -162,7 +161,7 @@ def main(config):
     coma.to(device)
 
     #TODO: change path for parameter in config
-    with open("output/%s/config.json" % timestamp, 'w') as fp:
+    with open("{}/config.json".format(output_dir), 'w') as fp:
         config["run_id"] = timestamp
         json.dump(config, fp, indent=4)
 
@@ -194,26 +193,25 @@ def main(config):
         if opt == 'sgd':
             adjust_learning_rate(optimizer, lr_decay)
 
-    save_training_info(loss_history)
-    logging.info("Training finished after %s epochs" % total_epochs)
-    logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
-
-    #TODO: change
-    logging.info("Saving best model state in output/%s/best_model.pkl" % timestamp)
-    torch.save(best_model.state_dict(), "output/%s/best_model.pkl" % timestamp)
-
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
+    save_training_info(loss_history, "{}/training_losses.csv".format(output_dir))
+    logging.info("Training finished after %s epochs." % total_epochs)
+    logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
+
+    #TODO: change
+    logging.info("Saving best model state in {}/best_model.pkl".format(output_dir))
+    torch.save(best_model.state_dict(), "{}/best_model.pkl".format(output_dir))
+
     #TODO: replace path for field in config
-    logging.info("Saving last model state...")
-    torch.save(coma.state_dict(), "output/%s/last_model.pkl" % timestamp)
+    logging.info("Saving last model state in {}/best_model.pkl".format(output_dir))
+    torch.save(coma.state_dict(), "{}/last_model.pkl".format(output_dir))
 
     # Change this to use the Experiment class.
     coma.eval()
-    torch.no_grad()
-    z_file = "output/%s/latent_space.csv" % timestamp
-    perf_file = "output/%s/performance.csv" % timestamp
+    z_file = "{}/latent_space.csv".format(output_dir)
+    perf_file = "{}/performance.csv".format(output_dir)
     z_columns = ["z" + str(i) for i in range(coma.z)]
     z_df = pd.DataFrame(None, columns=z_columns)
     perf_df = pd.DataFrame(None, columns=["mse"])
@@ -225,29 +223,30 @@ def main(config):
 
     logging.info("Calculating latent representation (z) and reconstruction performance measures.")
 
-    for i, loader in enumerate(loader_list):
-        subset = subsets[i]
-        all_subsets += [subset] * len(loader.dataset)
-        for batch, ids in loader:
-            # TODO: We are duplicating code here. The best would be to change encoder according to is_variational
-            batch = batch.to(device)
-            if coma.is_variational:
-                mu, log_var = coma.encoder(x=batch)
-                z = mu
-            else:
-                z = coma.encoder(x=batch)
+    with torch.no_grad():
+        for i, loader in enumerate(loader_list):
+            subset = subsets[i]
+            all_subsets += [subset] * len(loader.dataset)
+            for batch, ids in loader:
+                # TODO: We are duplicating code here. The best would be to change encoder according to is_variational
+                batch = batch.to(device)
+                if coma.is_variational:
+                    mu, log_var = coma.encoder(x=batch)
+                    z = mu
+                else:
+                    z = coma.encoder(x=batch)
 
-            z_df = z_df.append(pd.DataFrame(data=z.cpu().detach().numpy(), columns=z_columns))
-            all_ids.extend([str(int(x)) for x in ids.numpy()])
+                z_df = z_df.append(pd.DataFrame(data=z.cpu().detach().numpy(), columns=z_columns))
+                all_ids.extend([str(int(x)) for x in ids.numpy()])
 
-            x = coma.decoder(z)
+                x = coma.decoder(z)
 
-            mse = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
+                mse = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
 
-            # batch = batch[torch.randperm(len(batch)), :, :]
-            #TODO: it's important to report MSE using shuffled data, for reference.
-            # mse_shuffled = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
-            perf_df = perf_df.append(pd.DataFrame(data=mse, columns=["mse"]))
+                # batch = batch[torch.randperm(len(batch)), :, :]
+                #TODO: it's important to report MSE using shuffled data, for reference.
+                # mse_shuffled = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
+                perf_df = perf_df.append(pd.DataFrame(data=mse, columns=["mse"]))
 
     perf_df['ID'] = all_ids
     perf_df = perf_df.set_index('ID')
@@ -314,6 +313,7 @@ def evaluate(coma, dataloader, device):
                 total_kld_loss += batch_size * coma.kld_weight * kld_loss.item()
             else:
                 z = coma.encoder(x=data)
+                loss = 0
             out = coma.decoder(z)
             recon_loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
             total_recon_loss += batch_size * recon_loss.item()
@@ -332,7 +332,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
 
     parser.add_argument('-c', '--conf', help='path of config file')
-    parser.add_argument('-cp', '--checkpoint_dir', default=None, help='path where checkpoints file need to be stored')
     parser.add_argument('-od', '--output_dir', default=None, help='path where to store output')
     parser.add_argument('-id', '--data_dir', default=None, help='path where to fetch input data from')
     parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly.')
@@ -352,9 +351,6 @@ if __name__ == '__main__':
 
     if args.data_dir:
         config['data_dir'] = args.data_dir
-
-    if args.checkpoint_dir:
-        config['checkpoint_dir'] = args.checkpoint_dir
 
     if args.output_dir:
         config['output_dir'] = args.output_dir
