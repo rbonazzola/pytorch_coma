@@ -84,8 +84,8 @@ class CardiacMesh(object):
             for i in range(len(self.vertices)):
                 # Docs: https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.procrustes.html
                 mtx1, mtx2, _disparity = procrustes(
-                    self.vertices[i],
-                    reference_point_cloud
+                    reference_point_cloud,
+                    self.vertices[i]
                 )
                 disparity += _disparity
                 self.vertices[i] = np.array(mtx1) if self.procrustes_scaling else np.array(mtx2)
