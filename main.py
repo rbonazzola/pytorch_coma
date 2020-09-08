@@ -9,7 +9,6 @@ import mesh_operations
 from helpers import *
 import json
 
-
 __author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
 
 def adjust_learning_rate(optimizer, lr_decay):
@@ -37,20 +36,34 @@ def load_pretrained_model(config, checkpoint="last"):
     raise NotImplementedError
 
 
-def save_training_info(loss_info):
+def save_training_info(loss_info, filename):
     """
     :param loss_info: list of lists, containing six elements per "row" (the different losses), and one row per epoch
     :return:
     """
+    #TODO: use a Pandas DataFrame for this
     column_names = ["epoch", "reconstruction_loss_training", "KLD_loss_training", "loss_training", "reconstruction_loss_eval", "KLD_loss_eval", "loss_eval"]
-    with open("output/%s/training_losses.csv" % timestamp, "w") as handle:
+    with open(filename, "w") as handle:
         handle.write("%s\n" % ",".join(column_names))
         for row in loss_info:
             handle.write("%s\n" % ( ",".join(["%d"] + ["%.5f"]*(len(row)-1)) % tuple(row) ) )
 
 
+def log_loss_info(losses, nepochs):
+    losses.insert(1, nepochs) # include total number of epochs to the logged message
+    logger.info(
+        'Epoch {:d}/{:d}:  L1 loss + KL loss = Total Loss\n'
+        '\tTrain set:\t {:.5f} + {:.5f} = {:.5f},\n'
+        '\tValidation set:\t {:.5f} + {:.5f} = {:.5f}'
+        .format(*losses)
+    )
+    
+
 
 def main(config):
+
+    #This function is too long!
+    #TODO: Use the Experiment class to modularize the different steps
 
     #TODO: Print the commit hashes of all the repositories used (this, VTK, psbody)
     #TODO: Print the library versions
@@ -58,23 +71,23 @@ def main(config):
 
     logger.info('Current Git commit hash for repository pytorch_coma: %s' % get_current_commit_hash())
 
-    checkpoint_dir = config['checkpoint_dir']
-    format_tokens = {"TIMESTAMP": timestamp}
-    # TODO Put the format_tokens item into the configuration file
-    checkpoint_dir = checkpoint_dir.format(**format_tokens)
-
     output_dir = config['output_dir']
-
-    if not os.path.exists(checkpoint_dir):
-        os.makedirs(checkpoint_dir)
+    format_tokens = {"TIMESTAMP": timestamp}
+    #TODO: Put the format_tokens item into the configuration file
+    output_dir = output_dir.format(**format_tokens)
+    checkpoint_dir = os.path.join(output_dir, "checkpoints")
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+
     import logging
     log_file = config.get("log_file", None)
     if log_file is None:
-        log_file = "output/%s/log" % timestamp
+        log_file = "{}/log".format(output_dir)
+
     file_handler = logging.FileHandler(log_file)
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     file_handler.setFormatter(formatter)
@@ -89,13 +102,14 @@ def main(config):
     workers_thread = config['workers_thread']
     opt = config['optimizer']
     batch_size = config['batch_size']
-    # val_losses, accs, durations = [], [], []
+    is_this_a_test = config['test']
 
     device = get_device()
 
     logger.info('Loading template mesh from %s' % config['template_fname'])
     template_mesh = get_template_mesh(config) # Used to extract the connectivity between vertices
 
+    #TODO: Put this into a separate function
     logger.info('Generating transform matrices')
     # - A: adjacency matrices
     # - D: downsampling matrices
@@ -107,16 +121,30 @@ def main(config):
     num_nodes = [len(M[i].v) for i in range(len(M))]
 
     logger.info('Loading dataset')
+    #TODO important: make the partition random.
     dataset = load_cardiac_dataset(config)
+    
+    # TABULAR DATA
+    import pandas as pd
+    pd.set_option('display.max_columns', None)
+    tabla = pd.read_csv('/content/gdrive/My Drive/heartmesh_project/10k.csv')
+    
+    import prepTabularData
+    pData = prepTabularData.PrepData(tabla)
+
     logger.info("Using %s meshes for training and %s for validation." % (dataset.nTraining, dataset.nVal))
+    #TODO: I don't like the way I'm partitioning the data
     train_loader = get_loader(dataset.vertices_train, dataset.train_ids, batch_size=batch_size, num_workers=workers_thread, shuffle=True)
     val_loader = get_loader(dataset.vertices_val, dataset.val_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
     test_loader = get_loader(dataset.vertices_test, dataset.test_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
 
     logger.info('Loading CoMA model')
-    coma = Coma(config, D_t, U_t, A_t, num_nodes)
+    #TODO: print architecture of the network
+    tabDims = [len(pData.contXinds),len(pData.catgXinds),len(pData.contCinds),len(pData.catgCinds)]
+    coma = Coma(config, D_t, U_t, A_t, num_nodes, tabDims)
 
     #TODO: Use a dictionary to map the configuration parameters to this behaviour
+    #TODO: print configuration of the optimizer in the logs
     if opt == 'adam':
         optimizer = torch.optim.Adam(coma.parameters(), lr=lr, weight_decay=weight_decay)
     elif opt == 'sgd':
@@ -142,7 +170,8 @@ def main(config):
 
     coma.to(device)
 
-    with open("output/%s/config.json" % timestamp, 'w') as fp:
+    #TODO: change path for parameter in config
+    with open("{}/config.json".format(output_dir), 'w') as fp:
         config["run_id"] = timestamp
         json.dump(config, fp, indent=4)
 
@@ -158,19 +187,14 @@ def main(config):
 
         # logger.info("Training for epoch %s" % epoch)
         loss_t, recon_loss_t, kld_loss_t = train(coma, train_loader, optimizer, device)
-
         loss_ev, recon_loss_ev, kld_loss_ev = evaluate(coma, val_loader, device)
-
-        logger.info('Epoch %d/%d  Reconstruction loss + KL loss: %.5f + %.5f = %.5f (training), %.5f + %.5f = %.5f (evaluation)' %
-           (epoch, total_epochs,
-            recon_loss_t, kld_loss_t, loss_t,
-            recon_loss_ev, kld_loss_ev, loss_ev
-           )
-        )
-        loss_history.append([epoch+1, recon_loss_t, kld_loss_t, loss_t, recon_loss_ev, kld_loss_ev, loss_ev])
+        loss_history.append([epoch, recon_loss_t, kld_loss_t, loss_t, recon_loss_ev, kld_loss_ev, loss_ev])
+        # TODO: improve the logging here.
+        log_loss_info(loss_history[-1], total_epochs)
 
         save_model(coma, optimizer, epoch, loss_t, loss_ev, checkpoint_dir)
 
+        # To get the best run in the evaluation subset.
         if loss_ev < best_val_loss:
             best_val_loss = loss_ev
             best_epoch = epoch
@@ -179,59 +203,60 @@ def main(config):
         if opt == 'sgd':
             adjust_learning_rate(optimizer, lr_decay)
 
-    save_training_info(loss_history)
-    logging.info("Training finished after %s epochs" % total_epochs)
-    logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
-
-    #TODO: change
-    logging.info("Saving best model state in output/%s/best_model.pkl" % timestamp)
-    torch.save(best_model.state_dict(), "output/%s/best_model.pkl" % timestamp)
-
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
+    save_training_info(loss_history, "{}/training_losses.csv".format(output_dir))
+    logging.info("Training finished after %s epochs." % total_epochs)
+    logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
+
+    #TODO: change
+    logging.info("Saving best model state in {}/best_model.pkl".format(output_dir))
+    torch.save(best_model.state_dict(), "{}/best_model.pkl".format(output_dir))
+
     #TODO: replace path for field in config
-    logging.info("Saving last model state...")
-    torch.save(coma.state_dict(), "output/%s/last_model.pkl" % timestamp)
+    logging.info("Saving last model state in {}/best_model.pkl".format(output_dir))
+    torch.save(coma.state_dict(), "{}/last_model.pkl".format(output_dir))
 
     # Change this to use the Experiment class.
     coma.eval()
-    torch.no_grad()
-    z_file = "output/%s/latent_space.csv" % timestamp
-    perf_file = "output/%s/performance.csv" % timestamp
+    z_file = "{}/latent_space.csv".format(output_dir)
+    perf_file = "{}/performance.csv".format(output_dir)
     z_columns = ["z" + str(i) for i in range(coma.z)]
     z_df = pd.DataFrame(None, columns=z_columns)
     perf_df = pd.DataFrame(None, columns=["mse"])
 
     subsets = ["train", "validation", "test"]
+    loader_list = [train_loader, val_loader] if is_this_a_test else [train_loader, val_loader, test_loader]
     all_ids = []
     all_subsets = []
 
     logging.info("Calculating latent representation (z) and reconstruction performance measures.")
 
-    for i, loader in enumerate([train_loader, val_loader]):
-    # for i, loader in enumerate([train_loader, val_loader, test_loader]):
-        subset = subsets[i]
-        all_subsets += [subset] * len(loader.dataset)
-        for batch, ids in loader:
-            # TODO: We are duplicating code here. The best would be to change encoder according to is_variational
-            batch = batch.to(device)
-            if coma.is_variational:
-                mu, log_var = coma.encoder(x=batch)
-                z = mu # coma.sampling(mu, log_var)
-            else:
-                z = coma.encoder(x=batch)
+    with torch.no_grad():
+        for i, loader in enumerate(loader_list):
+            subset = subsets[i]
+            all_subsets += [subset] * len(loader.dataset)
+            for batch, ids in loader:
+                # TODO: We are duplicating code here. The best would be to change encoder according to is_variational
+                batch = batch.to(device)
+                if coma.is_variational:
+                    mu, log_var = coma.encoder(x=batch)
+                    z = mu
+                else:
+                    z = coma.encoder(x=batch)
 
-            z_df = z_df.append(pd.DataFrame(data=z.cpu().detach().numpy(), columns=z_columns))
-            all_ids.extend([str(int(x)) for x in ids.numpy()])
+                z_df = z_df.append(pd.DataFrame(data=z.cpu().detach().numpy(), columns=z_columns))
+                all_ids.extend([str(int(x)) for x in ids.numpy()])
 
-            x = coma.decoder(z)
+                x = coma.decoder(z)
 
-            mse = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
+                mse = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
 
-            # batch = batch[torch.randperm(len(batch)), :, :]
-            # mse_shuffled = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
-            perf_df = perf_df.append(pd.DataFrame(data=mse, columns=["mse"]))
+                # batch = batch[torch.randperm(len(batch)), :, :]
+                #TODO: it's important to report MSE using shuffled data, for reference.
+                # mse_shuffled = ((x - batch) ** 2).mean(axis=1).mean(axis=1).cpu().detach().numpy()
+                perf_df = perf_df.append(pd.DataFrame(data=mse, columns=["mse"]))
 
     perf_df['ID'] = all_ids
     perf_df = perf_df.set_index('ID')
@@ -250,6 +275,8 @@ def main(config):
     from subprocess import call
     import shlex
     call(shlex.split("touch output/%s/.finished" % timestamp))
+    
+    from torch.autograd import Variable
 
 
 def train(coma, dataloader, optimizer, device):
@@ -257,14 +284,35 @@ def train(coma, dataloader, optimizer, device):
     total_loss = 0
     total_kld_loss = 0
     total_recon_loss = 0
-    for i, (data, ids) in enumerate(dataloader):
+    # for i, (data, ids) in enumerate(dataloader):
+    # Let's say we've modified the dataloader to return
+    # (ids,xContReal,xCatgReal,xMaskReal,data)
+    for i, (ids,xContReal,xCatgReal,xMaskReal,data) in enumerate(dataloader):
+        xContReal = xContReal.to(device)
+        xCatgReal = xCatgReal.to(device)
+        xMaskReal = xMaskReal.to(device)
         data = data.to(device)
-        batch_size = data.size(0)
+        batch_size = xContReal.size(0)
+        contCreal = Variable(xContReal[:,pData.contCinds])
+        catgCreal = Variable(xCatgReal[:,pData.catgCinds])
+        contXreal = Variable(xContReal[:,pData.contXinds])
+        catgXreal = Variable(xCatgReal[:,pData.catgXinds])
+        
         optimizer.zero_grad()
-        out = coma(data)
+        out, contXfake, catgXfake, contCfake, catgCfake = coma(data, contXreal, catgXreal, contCreal, catgCreal)
         recon_loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
+        
+        ### tabular losses
+        with torch.no_grad(): # To avoid computing errors where inputs are missing
+            contXrealAux = torch.where(contXreal==-1.,contXfake,contXreal) 
+        tabContLoss = 50*F.mse_loss(contXfake,contXrealAux, reduction ='sum')
+        tabCatgLoss = F.binary_cross_entropy(catgXfake, catgXreal, weight = xMaskReal, reduction='sum')
+        
         total_recon_loss += batch_size * recon_loss.item()
         loss = recon_loss
+        ### add tabular loss
+        loss += tabContLoss + tabCatgLoss
+        
         if coma.is_variational:
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
@@ -276,37 +324,57 @@ def train(coma, dataloader, optimizer, device):
 
     return total_loss / len(dataloader.dataset), \
            total_recon_loss / len(dataloader.dataset), \
-           total_kld_loss / len(dataloader.dataset)
+           total_kld_loss / len(dataloader.dataset), \
+           tabContLoss / batch_size*len(dataloader.dataset), \
+           tabCatgLoss / batch_size*len(dataloader.dataset)
 
 
 def evaluate(coma, dataloader, device):
-    #TODO: compress train and evaluate into one function with "training" and "evaluate" modes
+    #TODO: condense train and evaluate into a single function with "training" and "evaluate" modes
     coma.eval()
     total_loss = 0
     total_kld_loss = 0
     total_recon_loss = 0
-    for i, (data, ids) in enumerate(dataloader):
+    for i, (ids,xContReal,xCatgReal,xMaskReal,data) in enumerate(dataloader):
+        xContReal = xContReal.to(device)
+        xCatgReal = xCatgReal.to(device)
+        xMaskReal = xMaskReal.to(device)
         data = data.to(device)
+        batch_size = xContReal.size(0)
+        contCreal = Variable(xContReal[:,pData.contCinds])
+        catgCreal = Variable(xCatgReal[:,pData.catgCinds])
+        contXreal = Variable(xContReal[:,pData.contXinds])
+        catgXreal = Variable(xCatgReal[:,pData.catgXinds])
         batch_size = data.size(0)
         with torch.no_grad():
             if coma.is_variational:
-                mu, log_var = coma.encoder(x=data)
+                mu, log_var = coma.encoder(data, contXreal, catgXreal)
                 z = mu # coma.sampling(mu, log_var)
                 # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
                 kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
                 loss = coma.kld_weight * kld_loss
                 total_kld_loss += batch_size * coma.kld_weight * kld_loss.item()
             else:
-                z = coma.encoder(x=data)
-            out = coma.decoder(z)
+                z = coma.encoder(data, contXreal, catgXreal)
+                loss = 0
+            out, contXfake, catgXfake, contCfake, catgCfake = coma.decoder(z,contCreal,catgCreal)
             recon_loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
+            
+            ### tabular losses
+            with torch.no_grad(): # To avoid computing errors where inputs are missing
+                contXrealAux = torch.where(contXreal==-1.,contXfake,contXreal) 
+            tabContLoss = batch_size *F.mse_loss(contXfake,contXrealAux, reduction ='sum')
+            tabCatgLoss = batch_size *F.binary_cross_entropy(catgXfake, catgXreal, weight = xMaskReal, reduction='sum')
+            
             total_recon_loss += batch_size * recon_loss.item()
             loss += recon_loss
             total_loss += batch_size * loss.item()
 
     return total_loss / len(dataloader.dataset), \
            total_recon_loss / len(dataloader.dataset), \
-           total_kld_loss / len(dataloader.dataset)
+           total_kld_loss / len(dataloader.dataset), \
+           tabContLoss / len(dataloader.dataset), \
+           tabCatgLoss / len(dataloader.dataset)
 
 
 if __name__ == '__main__':
@@ -316,10 +384,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
 
     parser.add_argument('-c', '--conf', help='path of config file')
-    parser.add_argument('-cp', '--checkpoint_dir', default=None, help='path where checkpoints file need to be stored')
     parser.add_argument('-od', '--output_dir', default=None, help='path where to store output')
     parser.add_argument('-id', '--data_dir', default=None, help='path where to fetch input data from')
-    parser.add_argument('--test', default=False, action="store_true", help='I')
+    parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly.')
 
     args = parser.parse_args()
 
@@ -329,7 +396,7 @@ if __name__ == '__main__':
               'it from current directory', args.conf)
 
     ################################################################################
-    ### Read configuration
+    ### Load configuration
     if not os.path.exists(args.conf):
         logger.error('Config not found' + args.conf)
     config = read_config(args.conf)
@@ -337,13 +404,15 @@ if __name__ == '__main__':
     if args.data_dir:
         config['data_dir'] = args.data_dir
 
-    if args.checkpoint_dir:
-        config['checkpoint_dir'] = args.checkpoint_dir
-
     if args.output_dir:
         config['output_dir'] = args.output_dir
 
     if args.test:
-        config['comments'] = "test"
+        # some small values so that the execution ends quickly
+        config['comments'] = "this is a test"
+        config['nTraining'] = 32
+        config['nVal'] = 80
+        config['epoch'] = 3
+    config['test'] = args.test
 
     main(config)
