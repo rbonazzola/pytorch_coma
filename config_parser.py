@@ -16,6 +16,7 @@ def set_default_parameters(config):
     config.set('Input Output', 'output_dir', 'output')
     config.set('Input Output', 'ids_file', 'data/meshes/numpy_files/LV_all_subjects/LVED_all_subjects_subj_ids.txt') # TODO: add these options into the scripts
     config.set('Input Output', 'partition', 'LV')
+    config.set('Input Output', 'tabular_data', 'data/10k.csv')
 
     # TODO: add these options into the scripts
     config.add_section('Pre-processing Parameters')
@@ -71,7 +72,8 @@ def read_config(fname):
     self['output_dir'] = config.get('Input Output', 'output_dir')
     self['partition'] = config.get('Input Output', 'partition')
     self['ids_file'] = config.get('Input Output', 'ids_file')
-
+    self['tabular_data_file'] = config.get('Input Output', 'tabular_data')
+    
     self['procrustes_type'] = config.get('Pre-processing Parameters', 'procrustes_type')
     self['procrustes_scaling'] = config.getboolean('Pre-processing Parameters', 'procrustes_scaling')
 
