@@ -122,22 +122,24 @@ def main(config):
 
     logger.info('Loading dataset')
     #TODO important: make the partition random.
-    dataset = load_cardiac_dataset(config)
+    cardiac_dataset = load_cardiac_dataset(config)
     
     # TABULAR DATA
-    import pandas as pd
-    pd.set_option('display.max_columns', None)
-    tabla = pd.read_csv('/content/gdrive/My Drive/heartmesh_project/10k.csv')
+    tabla = pd.read_csv(config['tabular_data_file'])
     
     import prepTabularData
     pData = prepTabularData.PrepData(tabla)
 
-    logger.info("Using %s meshes for training and %s for validation." % (dataset.nTraining, dataset.nVal))
-    #TODO: I don't like the way I'm partitioning the data
-    train_loader = get_loader(dataset.vertices_train, dataset.train_ids, batch_size=batch_size, num_workers=workers_thread, shuffle=True)
-    val_loader = get_loader(dataset.vertices_val, dataset.val_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
-    test_loader = get_loader(dataset.vertices_test, dataset.test_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
-
+    logger.info("Using %s meshes for training and %s for validation." % (cardiac_dataset.nTraining, cardiac_dataset.nVal))
+    train_loader, val_loader, test_loader = get_loader(cardiac_dataset, pData, batch_size=batch_size, num_workers=workers_thread, shuffle=True)
+    
+    
+   # Define continuous and categorical conditioners
+    contCnames = ['LVEDV_automatic', 'LVESV_automatic', 'LVSV_automatic', 'LVEF_automatic', 'LVM_automatic','age','bmi']
+    catgCnames = ['sex', 'ss']
+    # Build conditioning indices
+    pData.getInds(contCnames,catgCnames)
+    
     logger.info('Loading CoMA model')
     #TODO: print architecture of the network
     tabDims = [len(pData.contXinds),len(pData.catgXinds),len(pData.contCinds),len(pData.catgCinds)]
