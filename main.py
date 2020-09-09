@@ -50,11 +50,12 @@ def save_training_info(loss_info, filename):
 
 
 def log_loss_info(losses, nepochs):
+    #TODO: parameterize the reconstruction loss (it doesn't have to be L1)
     losses.insert(1, nepochs) # include total number of epochs to the logged message
     logger.info(
-        'Epoch {:d}/{:d}:  L1 loss + KL loss = Total Loss\n'
-        '\tTrain set:\t {:.5f} + {:.5f} = {:.5f},\n'
-        '\tValidation set:\t {:.5f} + {:.5f} = {:.5f}'
+        'Epoch {:d}/{:d}:\t'
+        'Train set: {:.5f} (L1) + {:.5f} (KL) = {:.5f},\t'
+        'Validation set: {:.5f} + {:.5f} = {:.5f}'
         .format(*losses)
     )
 
@@ -205,7 +206,7 @@ def main(config):
     torch.save(best_model.state_dict(), "{}/best_model.pkl".format(output_dir))
 
     #TODO: replace path for field in config
-    logging.info("Saving last model state in {}/best_model.pkl".format(output_dir))
+    logging.info("Saving last model state in {}/last_model.pkl".format(output_dir))
     torch.save(coma.state_dict(), "{}/last_model.pkl".format(output_dir))
 
     # Change this to use the Experiment class.
