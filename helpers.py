@@ -3,6 +3,7 @@ from VTK.VTKMesh import VTKObject as Mesh
 from cardiac_mesh import CardiacMesh
 from torch.utils.data import TensorDataset, DataLoader
 from subprocess import check_output
+import os
 import shlex
 import pickle
 
@@ -31,17 +32,25 @@ def get_template_mesh(config):
 
     return template_mesh
 
-def load_cardiac_dataset(config):
-    dataset = CardiacMesh(
-        nTraining=config['nTraining'],
-        nVal=config['nVal'],
-        meshes_file=config['data_dir'],
-        ids_file=config['ids_file'],
-        reference_mesh=get_template_mesh(config),
-        subpart=CardiacMesh.SUBPARTS_IDS[config['partition']],
-        procrustes_scaling=config["procrustes_scaling"],
-        procrustes_type=config["procrustes_type"]
-    )
+def load_cardiac_dataset(config, mode="training"):
+    if os.path.exists(config['preprocessed_data']):
+      dataset = pickle.load(open(config["preprocessed_data"], "rb")) 
+      dataset.nTraining=config['nTraining']
+      dataset.nVal=config['nVal']
+      dataset.partition_dataset()
+    else:
+      dataset = CardiacMesh(
+          nTraining=config['nTraining'],
+          nVal=config['nVal'],
+          meshes_file=config['data_dir'],
+          ids_file=config['ids_file'],
+          reference_mesh=get_template_mesh(config),
+          subpart=CardiacMesh.SUBPARTS_IDS[config['partition']],
+          procrustes_scaling=config["procrustes_scaling"],
+          procrustes_type=config["procrustes_type"],
+          mode=mode
+      )
+    
     return dataset
 
 def get_cardiac_dataset_len(config):
@@ -55,20 +64,6 @@ def get_cardiac_dataset_len(config):
 def get_current_commit_hash():
     return check_output(shlex.split("git rev-parse HEAD")).decode().strip()
 
-#TODO: create a class
-class MyDataset(TensorDataset):
-    def __init__(self, dataset1, dataset2):
-        self.dataset1 = dataset1 # datasets should be sorted!
-        self.dataset2 = dataset2
-
-    def __getitem__(self, index):
-        x1 = self.dataset1[index]
-        x2 = self.dataset2[index]
-
-        return x1, x2
-
-    def __len__(self):
-        return len(self.dataset1)
 
 def get_loader(dataset, ids, batch_size, num_workers, shuffle=True):
     '''
@@ -80,6 +75,6 @@ def get_loader(dataset, ids, batch_size, num_workers, shuffle=True):
     :return:
     '''
     ids = torch.Tensor([int(x) for x in ids])
-    vertices = MyDataset(torch.Tensor(dataset), ids)
+    vertices = TensorDataset(torch.Tensor(dataset), ids)
     loader = DataLoader(vertices, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
     return loader
