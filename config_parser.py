@@ -11,11 +11,11 @@ def set_default_parameters(config):
     config.set('Input Output', 'visualize', 'False')
     config.set('Input Output', 'data_dir', 'data/meshes/numpy_files/LV_all_subjects/train.npy')
     config.set('Input Output', 'preprocessed_data', 'data/meshes/numpy_files/LV_all_subjects/LV_GPA_meshes.pkl')
-    config.set('Input Output', 'visual_output_dir', '')
     config.set('Input Output', 'template_fname', './template/template.vtk')
     config.set('Input Output', 'output_dir', 'output/{TIMESTAMP}')
-    config.set('Input Output', 'ids_file', 'data/meshes/numpy_files/LV_all_subjects/LVED_all_subjects_subj_ids.txt') # TODO: add these options into the scripts
+    config.set('Input Output', 'ids_file', 'data/meshes/numpy_files/LV_all_subjects/LVED_all_subjects_subj_ids.txt')
     config.set('Input Output', 'partition', 'LV')
+    config.set('Input Output', 'visual_output_dir', '')
 
     # TODO: add these options into the scripts
     config.add_section('Pre-processing Parameters')
@@ -34,12 +34,12 @@ def set_default_parameters(config):
     config.set('Model Parameters', 'optimizer', 'sgd')
     config.set('Model Parameters', 'activation_function', 'relu')         # TODO: add this option into the scripts
     config.set('Model Parameters', 'reconstruction_loss', 'l1')           # TODO: add this option into the scripts
-    config.set('Model Parameters', 'kld_weight', 0)             # TODO: add this option into the scripts
+    config.set('Model Parameters', 'kld_weight', 0) 
     config.set('Model Parameters', 'weight_loss', 0)                  # TODO: add this option into the scripts
 
     config.add_section('Learning Parameters')
-    config.set('Learning Parameters', 'nTraining', 1600)                    # TODO: add this option into the scripts
-    config.set('Learning Parameters', 'nVal', 200)                          # TODO: add this option into the scripts
+    config.set('Learning Parameters', 'nTraining', 1600)
+    config.set('Learning Parameters', 'nVal', 200) 
     config.set('Learning Parameters', 'batch_size', 16)
     config.set('Learning Parameters', 'learning_rate', 8e-3)
     config.set('Learning Parameters', 'learning_rate_decay', 0.99)
@@ -87,12 +87,12 @@ def read_config(fname):
 
     self['activation_function'] = config.get('Model Parameters', 'activation_function') # TODO: add this option into the scripts
     self['reconstruction_loss'] = config.get('Model Parameters', 'reconstruction_loss') # TODO: add this option into the scripts
-    self['kld_weight'] = config.getfloat('Model Parameters', 'kld_weight')       # TODO: add this option into the scripts
+    self['kld_weight'] = config.getfloat('Model Parameters', 'kld_weight') 
 
     self['weight_loss'] = config.get('Model Parameters', 'weight_loss')                 # TODO: add this option into the scripts
 
-    self['nVal'] = config.getint('Learning Parameters', 'nVal')                         # TODO: add this option into the scripts
-    self['nTraining'] = config.getint('Learning Parameters', 'nTraining')             # TODO: add this option into the scripts
+    self['nVal'] = config.getint('Learning Parameters', 'nVal') 
+    self['nTraining'] = config.getint('Learning Parameters', 'nTraining') 
     self['batch_size'] = config.getint('Learning Parameters', 'batch_size')
     self['learning_rate'] = config.getfloat('Learning Parameters', 'learning_rate')
     self['learning_rate_decay'] = config.getfloat('Learning Parameters', 'learning_rate_decay')
@@ -122,6 +122,7 @@ if __name__ == '__main__':
 
     if not os.path.exists("config_files"):
         os.makedirs("config_files")
+
     config_fname = os.path.join(pkg_path, 'config_files/default.cfg')
     config = configparser.RawConfigParser()
     set_default_parameters(config)
