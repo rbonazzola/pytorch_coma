@@ -6,9 +6,26 @@ from subprocess import check_output
 import os
 import shlex
 import pickle
+import nvgpu
+from Logger import logger
+
+def get_best_gpu_device():
+    '''
+    This function return the GPU with the greatest amount of free memory
+    '''
+    gpu_info = nvgpu.gpu_info()
+    free_mem = [x['mem_total']-x['mem_used'] for x in gpu_info]
+    best_gpu_index = free_mem.index(max(free_mem))
+    best_gpu = int(gpu_info[best_gpu_index]['index'])
+    return best_gpu
+    
+    
 
 def get_device():
-    return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    best_gpu = get_best_gpu_device()
+    torch.cuda.set_device(best_gpu)
+    return device
 
 def scipy_to_torch_sparse(scp_matrix):
     import numpy as np
@@ -34,6 +51,7 @@ def get_template_mesh(config):
 
 def load_cardiac_dataset(config, mode="training"):
     if os.path.exists(config['preprocessed_data']):
+      logger.info("Loading pre-aligned mesh data from {}".format(config['preprocessed_data']))
       dataset = pickle.load(open(config["preprocessed_data"], "rb")) 
       dataset.nTraining=config['nTraining']
       dataset.nVal=config['nVal']

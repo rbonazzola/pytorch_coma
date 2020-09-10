@@ -13,6 +13,7 @@ pip install torch-cluster==latest+${CUDA} -f https://pytorch-geometric.com/whl/t
 pip install torch-spline-conv==latest+${CUDA} -f https://pytorch-geometric.com/whl/torch-${TORCH}.html
 pip install torch-geometric
 pip install vtk
+pip install nvgpu
 
 # git clone https://github.com/MPI-IS/mesh.git
 cd ~/src
