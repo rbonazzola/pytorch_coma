@@ -8,6 +8,8 @@ from model import Coma
 import mesh_operations
 from helpers import *
 import json
+from pprint import pprint
+
 
 __author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
 
@@ -105,6 +107,8 @@ def main(config):
     is_this_a_test = config['test']
 
     device = get_device()
+    logger.info('Choosing GPU number %s' % torch.cuda.current_device())
+    torch.cuda.current_device()
 
     logger.info('Loading template mesh from %s' % config['template_fname'])
     template_mesh = get_template_mesh(config) # Used to extract the connectivity between vertices
@@ -137,7 +141,7 @@ def main(config):
     #TODO: Use a dictionary to map the configuration parameters to this behaviour
     #TODO: print configuration of the optimizer in the logs
     if opt == 'adam':
-        optimizer = torch.optim.Adam(coma.parameters(), lr=lr, weight_decay=weight_decay)
+        optimizer = torch.optim.Adam(coma.parameters(), lr=lr, betas=(0.5,0.99), weight_decay=weight_decay)
     elif opt == 'sgd':
         optimizer = torch.optim.SGD(coma.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
     else:
@@ -265,7 +269,7 @@ def main(config):
     # This a temporary (i.e. permanent) workaround to indicate that the execution finished
     from subprocess import call
     import shlex
-    call(shlex.split("touch output/%s/.finished" % timestamp))
+    call(shlex.split("touch %s/.finished" % output_dir))
 
 
 def train(coma, dataloader, optimizer, device):
@@ -278,12 +282,13 @@ def train(coma, dataloader, optimizer, device):
         batch_size = data.size(0)
         optimizer.zero_grad()
         out = coma(data)
-        recon_loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
+        recon_loss = F.mse_loss(out, data.reshape(-1, coma.filters[0]))
         total_recon_loss += batch_size * recon_loss.item()
         loss = recon_loss
         if coma.is_variational:
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
+            from IPython import embed; embed()
             loss += coma.kld_weight * kld_loss
             total_kld_loss += batch_size * coma.kld_weight * kld_loss.item()
         total_loss += batch_size * loss.item()
@@ -316,7 +321,7 @@ def evaluate(coma, dataloader, device):
                 z = coma.encoder(x=data)
                 loss = 0
             out = coma.decoder(z)
-            recon_loss = F.l1_loss(out, data.reshape(-1, coma.filters[0]))
+            recon_loss = F.mse_loss(out, data.reshape(-1, coma.filters[0]))
             total_recon_loss += batch_size * recon_loss.item()
             loss += recon_loss
             total_loss += batch_size * loss.item()
@@ -332,10 +337,19 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
 
-    parser.add_argument('-c', '--conf', help='path of config file')
+    parser.add_argument('-c', '--conf', help='path of config file', default="config_files/default.cfg")
     parser.add_argument('-od', '--output_dir', default=None, help='path where to store output')
     parser.add_argument('-id', '--data_dir', default=None, help='path where to fetch input data from')
+    parser.add_argument('--nTraining', default=None, type=int, help='Number of training samples.')
+    parser.add_argument('--z', default=None, type=int, help='Number of latent variables.')
+    parser.add_argument('--optimizer', default="adam", help='optimizer (adam or sgd).')
+    parser.add_argument('--epoch', default=None, type=int, help='Maximum number of epochs.')
+    parser.add_argument('--stop_if_not_learning', default=None, help='Stop training if losses do not change.')
     parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly.')
+    parser.add_argument('--dry-run', dest="dry_run", default=False, action="store_true", help='Dry run: just prints out the parameters of the execution but performs no training.')
+    parser.add_argument('--kld_weight', type=float, default=None, help='Weight of Kullback-Leibler divergence.')
+    parser.add_argument('--learning_rate', type=float, default=None, help='Learning rate.')
+
 
     args = parser.parse_args()
 
@@ -362,6 +376,17 @@ if __name__ == '__main__':
         config['nTraining'] = 32
         config['nVal'] = 80
         config['epoch'] = 3
+        config['output_dir'] = "output/test_{TIMESTAMP}"
     config['test'] = args.test
+   
+    def overwrite_config_items(config, args):       
+      for attr, value in args.__dict__.items():
+        if attr in config.keys() and value is not None:
+          config[attr] = value
+       
+    overwrite_config_items(config, args) 
+    if args.dry_run:
+      pprint(config)
+      exit()
 
     main(config)
