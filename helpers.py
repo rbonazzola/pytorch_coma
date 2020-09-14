@@ -6,13 +6,13 @@ from subprocess import check_output
 import os
 import shlex
 import pickle
-import nvgpu
 from Logger import logger
 
 def get_best_gpu_device():
     '''
     This function return the GPU with the greatest amount of free memory
     '''
+    import nvgpu
     gpu_info = nvgpu.gpu_info()
     free_mem = [x['mem_total']-x['mem_used'] for x in gpu_info]
     best_gpu_index = free_mem.index(max(free_mem))
@@ -23,8 +23,9 @@ def get_best_gpu_device():
 
 def get_device():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    best_gpu = get_best_gpu_device()
-    torch.cuda.set_device(best_gpu)
+    if torch.cuda.is_available():
+      best_gpu = get_best_gpu_device()
+      torch.cuda.set_device(best_gpu)
     return device
 
 def scipy_to_torch_sparse(scp_matrix):
