@@ -60,6 +60,7 @@ class CardiacMesh(object):
         if not self.is_normalized:
             self.normalize()
 
+        # TODO: the partitioning should not be performed in here
         if self.__mode == 'training':
             self.nVal = nVal
             self.nTraining = nTraining
@@ -68,17 +69,53 @@ class CardiacMesh(object):
 
 
     def preprocess_meshes(self):
-        self.generalized_procrustes()
 
+        self.generalized_procrustes()
+        # self.generalized_procrustes_scipy()
 
     def generalized_procrustes(self):
+
+        from scipy.linalg import orthogonal_procrustes
+
+        reference_point_cloud = self.reference_mesh.points  # reference to align to
+        old_disparity, disparity = 0, 1
+
+        # Center the meshes
+        for i in range(len(self.vertices)):
+            self.vertices[i] -= np.mean(self.vertices[i], 0)
+
+        while abs(old_disparity - disparity) / disparity > 1e-2:
+            old_disparity = disparity
+            print(disparity)
+            disparity = 0
+            for i in range(len(self.vertices)):
+                # Docs: https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.orthogonal_procrustes.html
+                R, s = orthogonal_procrustes(self.vertices[i], reference_point_cloud)
+
+                # Rotate
+                self.vertices[i] = np.dot(self.vertices[i], R) # * s
+
+                # Mean point-wise MSE
+                _disparity = np.mean(np.sqrt(np.sum(
+                    np.square(self.vertices[i] - reference_point_cloud), axis=1)
+                ))
+
+                disparity += _disparity
+
+            disparity /= self.vertices.shape[0]
+            reference_point_cloud = self.vertices.mean(axis=0)
+
+
+    # I am not using this function right now, since it does not have the expected behaviour
+    # Unlike the docs read, it appears to scale the meshes
+    def generalized_procrustes_scipy(self):
         logger.info("Performing Procrustes analysis")
 
         old_disparity, disparity = 0, 1  # random values
         reference_point_cloud = self.reference_mesh.points  # reference to align to
 
         it_count = 0
-        while abs(old_disparity - disparity) / disparity > 1e-2:
+        while abs(old_disparity - disparity) / disparity > 1e-2 and disparity :
             old_disparity = disparity
             disparity = 0
             for i in range(len(self.vertices)):
@@ -88,7 +125,7 @@ class CardiacMesh(object):
                     self.vertices[i]
                 )
                 disparity += _disparity
-                self.vertices[i] = np.array(mtx1) if self.procrustes_scaling else np.array(mtx2)
+                self.vertices[i] = np.array(mtx2) if self.procrustes_scaling else np.array(mtx1)
             disparity /= self.vertices.shape[0]
             reference_point_cloud = self.vertices.mean(axis=0)
             it_count += 1
@@ -126,6 +163,7 @@ class CardiacMesh(object):
     def normalize(self):
         # Mean and std. are computed based on all the samples (not only the training ones). I think this makes sense.
         # Create self.is_normalized argument and set to True to track normalization status.
+        # from IPython import embed; embed()
         self.mean, self.std = np.mean(self.vertices, axis=0), np.std(self.vertices, axis=0)
         self.vertices = (self.vertices - self.mean) / self.std
         self.is_normalized = True

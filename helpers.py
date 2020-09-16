@@ -28,6 +28,7 @@ def get_device():
       torch.cuda.set_device(best_gpu)
     return device
 
+
 def scipy_to_torch_sparse(scp_matrix):
     import numpy as np
     indices = np.vstack((scp_matrix.row, scp_matrix.col))
@@ -38,6 +39,7 @@ def scipy_to_torch_sparse(scp_matrix):
 
     sparse_tensor = torch.sparse.FloatTensor(i, v, torch.Size(shape))
     return sparse_tensor
+
 
 def get_template_mesh(config):
     template_file_path = config.get('template_fname', "template/template.vtk")
@@ -50,13 +52,20 @@ def get_template_mesh(config):
 
     return template_mesh
 
-def load_cardiac_dataset(config, mode="training"):
+
+def load_cardiac_dataset(config=None, mode="training"):
+
+    if config is None:
+        from config_parser import read_default_config
+        config = read_default_config()
+
     if os.path.exists(config['preprocessed_data']):
       logger.info("Loading pre-aligned mesh data from {}".format(config['preprocessed_data']))
-      dataset = pickle.load(open(config["preprocessed_data"], "rb")) 
-      dataset.nTraining=config['nTraining']
-      dataset.nVal=config['nVal']
-      dataset.partition_dataset()
+      dataset = pickle.load(open(config["preprocessed_data"], "rb"))
+      if mode == "training":
+          dataset.nTraining = config['nTraining']
+          dataset.nVal = config['nVal']
+          dataset.partition_dataset()
     else:
       dataset = CardiacMesh(
           nTraining=config['nTraining'],
@@ -71,6 +80,7 @@ def load_cardiac_dataset(config, mode="training"):
       )
     
     return dataset
+
 
 def get_cardiac_dataset_len(config):
     import numpy as np
