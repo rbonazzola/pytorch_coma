@@ -105,8 +105,6 @@ def read_config(fname):
 
     return self
 
-def read_default_config():
-    return read_config("config_files/default.cfg")
 
 def save_config(config, filename):
 
@@ -115,6 +113,19 @@ def save_config(config, filename):
         config.write(configfile)
         configfile.close()
 
+
+def save_default_config(replace=True):
+    config_fname = "config_files/default.cfg"
+    if os.path.exists(config_fname) and replace or not os.path.exists(config_fname):
+        config = configparser.RawConfigParser()
+        set_default_parameters(config)
+        save_config(config, config_fname)
+    return config_fname
+
+
+def read_default_config():
+    config_fname = save_default_config()
+    return read_config(config_fname)
 
 if __name__ == '__main__':
 
