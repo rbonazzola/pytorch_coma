@@ -70,10 +70,12 @@ class CardiacMesh(object):
 
     def preprocess_meshes(self):
 
-        self.generalized_procrustes()
-        # self.generalized_procrustes_scipy()
+        if self.procrustes_scaling:
+            self.generalized_procrustes_no_scaling()
+        else:
+            self.generalized_procrustes_scaling()
 
-    def generalized_procrustes(self):
+    def generalized_procrustes_no_scaling(self):
 
         from scipy.linalg import orthogonal_procrustes
 
@@ -105,10 +107,12 @@ class CardiacMesh(object):
             disparity /= self.vertices.shape[0]
             reference_point_cloud = self.vertices.mean(axis=0)
 
+        self.procrustes_aligned = True
+        logger.info("Generalized Procrustes analysis performed after %s iterations" % it_count)
 
     # I am not using this function right now, since it does not have the expected behaviour
     # Unlike the docs read, it appears to scale the meshes
-    def generalized_procrustes_scipy(self):
+    def generalized_procrustes_scaling(self):
         logger.info("Performing Procrustes analysis")
 
         old_disparity, disparity = 0, 1  # random values
@@ -125,7 +129,7 @@ class CardiacMesh(object):
                     self.vertices[i]
                 )
                 disparity += _disparity
-                self.vertices[i] = np.array(mtx2) if self.procrustes_scaling else np.array(mtx1)
+                self.vertices[i] = np.array(mtx2) # if self.procrustes_scaling else np.array(mtx1)
             disparity /= self.vertices.shape[0]
             reference_point_cloud = self.vertices.mean(axis=0)
             it_count += 1
