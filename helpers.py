@@ -56,7 +56,7 @@ def get_template_mesh(config):
 def load_cardiac_dataset(config=None, mode="training"):
 
     if config is None:
-        from config_parser import read_default_config
+        from config.config_parser import read_default_config
         config = read_default_config()
 
     if os.path.exists(config['preprocessed_data']):

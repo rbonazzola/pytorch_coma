@@ -3,7 +3,7 @@ import torch
 import pandas as pd
 import torch.nn.functional as F
 from Logger import logger, timestamp
-from config_parser import read_config
+from config.config_parser import read_config
 from model import Coma
 import mesh_operations
 from helpers import *

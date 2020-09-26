@@ -7,7 +7,7 @@ import sys
 import torch
 
 os.chdir(check_output(shlex.split("git rev-parse --show-toplevel")).strip().decode('ascii'))
-from config_parser import read_config
+from config.config_parser import read_config
 from helpers import *
 
 import ExperimentClass

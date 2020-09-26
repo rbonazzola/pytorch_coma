@@ -1,9 +1,9 @@
 import pickle
 from cardiac_mesh import CardiacMesh
 from helpers import get_template_mesh
-import config_parser
+from config.config_parser import read_default_config
 
-config = config_parser.read_default_config()
+config = read_default_config()
 
 dataset = CardiacMesh(
   meshes_file=config['data_dir'],

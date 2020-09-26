@@ -86,7 +86,7 @@ class ComaExperiment(Experiment):
         # To avoid applying Generalized Procrustes Analysis (GPA) again.
         #TODO: change for the current config instead of the default.
         #I am doing this as a temporary workaround, but will be deprecated soon.
-        from config_parser import read_default_config
+        from config.config_parser import read_default_config
         config = read_default_config()
         prealigned_meshes = config["preprocessed_data"]
         prealigned_meshes = pickle.load(open(prealigned_meshes, "rb"))
