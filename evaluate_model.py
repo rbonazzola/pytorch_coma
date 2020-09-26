@@ -8,7 +8,7 @@ import torch
 
 os.chdir(check_output(shlex.split("git rev-parse --show-toplevel")).strip().decode('ascii'))
 from config.config_parser import read_config
-from helpers import *
+from utils.helpers import *
 
 import ExperimentClass
 exp = ExperimentClass.ComaExperiment("output/checkpoints/2020-08-20_14-36-37/")
@@ -23,7 +23,7 @@ dataloader = get_loader(dataset.all_vertices, batch_size=1, num_workers=config['
 # config_file = "config_files/default.cfg"
 # config = read_config(config_file)
 
-# import mesh_operations
+# import utils.mesh_operations
 # device = get_device()
 # template_mesh = get_template_mesh(config)
 # M, A, D, U = mesh_operations.generate_transform_matrices(template_mesh, config['downsampling_factors'])

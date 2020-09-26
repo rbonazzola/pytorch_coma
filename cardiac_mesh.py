@@ -5,7 +5,7 @@ import time
 import numpy as np
 import random
 from scipy.spatial import procrustes
-from Logger import logger
+from utils.logger import logger
 
 # I rename the class VTKObject as Mesh so I don't have to change the function calls in the original CoMA code
 from VTK.VTKMesh import VTKObject as Mesh  #, MeshViewer, MeshViewers

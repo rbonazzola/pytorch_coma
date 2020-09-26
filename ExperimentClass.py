@@ -1,8 +1,8 @@
 import os
 import torch
-from helpers import *
+from utils.helpers import *
 import json
-import mesh_operations
+import utils.mesh_operations
 import re
 import pandas as pd
 
@@ -117,7 +117,7 @@ class ComaExperiment(Experiment):
 
     def get_cardiac_dataset(self):
         raise NotImplementedError
-        from helpers import load_cardiac_dataset
+        from utils.helpers import load_cardiac_dataset
         return load_cardiac_dataset(self.config)
 
     def __assign_set(data):

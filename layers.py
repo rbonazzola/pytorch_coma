@@ -4,7 +4,7 @@ from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.conv.cheb_conv import ChebConv
 from torch_geometric.utils import remove_self_loops
 
-from utils import normal
+from utils.utils import normal
 
 __author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
 

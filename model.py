@@ -12,7 +12,7 @@ class Coma(torch.nn.Module):
         self.n_layers = config['n_layers']
         self.filters = config['num_conv_filters']
 
-        from helpers import get_cardiac_dataset_len
+        from utils.helpers import get_cardiac_dataset_len
         num_features = get_cardiac_dataset_len(config)[-1] # number of features per graph node, typically 3 (x, y, z coordinates)
         self.filters.insert(0, num_features)
 

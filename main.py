@@ -2,11 +2,11 @@ import os
 import torch
 import pandas as pd
 import torch.nn.functional as F
-from Logger import logger, timestamp
+from utils.logger import logger, timestamp
 from config.config_parser import read_config
 from model import Coma
-import mesh_operations
-from helpers import *
+from utils import mesh_operations
+from utils.helpers import *
 import json
 from pprint import pprint
 
@@ -107,8 +107,6 @@ def main(config):
     is_this_a_test = config['test']
 
     device = get_device()
-    logger.info('Choosing GPU number %s' % torch.cuda.current_device())
-    torch.cuda.current_device()
 
     logger.info('Loading template mesh from %s' % config['template_fname'])
     template_mesh = get_template_mesh(config) # Used to extract the connectivity between vertices

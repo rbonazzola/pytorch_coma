@@ -1,6 +1,6 @@
 import pickle
 from cardiac_mesh import CardiacMesh
-from helpers import get_template_mesh
+from utils.helpers import get_template_mesh
 from config.config_parser import read_default_config
 
 config = read_default_config()
