@@ -70,13 +70,15 @@ class CardiacMesh(object):
 
     def preprocess_meshes(self):
 
+        # Merge these functions into one
         if self.procrustes_scaling:
-            self.generalized_procrustes_no_scaling()
-        else:
             self.generalized_procrustes_scaling()
+        else:
+            self.generalized_procrustes_no_scaling()
 
     def generalized_procrustes_no_scaling(self):
 
+        logger.info("Performing Procrustes analysis without scaling")
         from scipy.linalg import orthogonal_procrustes
 
         reference_point_cloud = self.reference_mesh.points  # reference to align to
@@ -86,9 +88,9 @@ class CardiacMesh(object):
         for i in range(len(self.vertices)):
             self.vertices[i] -= np.mean(self.vertices[i], 0)
 
-        while abs(old_disparity - disparity) / disparity > 1e-2:
+        it_count = 0
+        while abs(old_disparity - disparity) / disparity > 1e-4:
             old_disparity = disparity
-            print(disparity)
             disparity = 0
             for i in range(len(self.vertices)):
                 # Docs: https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.orthogonal_procrustes.html
@@ -106,14 +108,14 @@ class CardiacMesh(object):
 
             disparity /= self.vertices.shape[0]
             reference_point_cloud = self.vertices.mean(axis=0)
+            print(disparity)
+            it_count += 1
 
         self.procrustes_aligned = True
         logger.info("Generalized Procrustes analysis performed after %s iterations" % it_count)
 
-    # I am not using this function right now, since it does not have the expected behaviour
-    # Unlike the docs read, it appears to scale the meshes
     def generalized_procrustes_scaling(self):
-        logger.info("Performing Procrustes analysis")
+        logger.info("Performing Procrustes analysis with scaling")
 
         old_disparity, disparity = 0, 1  # random values
         reference_point_cloud = self.reference_mesh.points  # reference to align to
@@ -135,7 +137,7 @@ class CardiacMesh(object):
             it_count += 1
 
         self.procrustes_aligned = True
-        logger.info("Generalized Procrustes analysis performed after %s iterations" % it_count)
+        logger.info("Generalized Procrustes analysis with scaling performed after %s iterations" % it_count)
 
 
     def load_meshes(self):
