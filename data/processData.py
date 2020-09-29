@@ -63,20 +63,26 @@ class VTKDataset(object):
 
 
     def gather_data(self):
+
+        ids = []
         vertices = []
+
+        mesh = Mesh(filename=self.datapaths[0], load_connectivity=True)
+        mesh = Mesh.extractSubpart(mesh, self.partition_ids)
+        shape = mesh.points.shape
 
         # tqdm: for progress bar
         for i, p in enumerate(tqdm(self.datapaths, unit="subjects")):
             mesh_filename = p
             mesh = Mesh(filename=mesh_filename, load_connectivity=False)  # Load mesh
             mesh = Mesh.extractSubpart(mesh, self.partition_ids)
-            vertices.append(mesh.points)
-            if i == 100:
-                break
+            if mesh.points.shape == shape:
+                vertices.append(mesh.points)
+                ids.append(self.subj_ids[i])
+            else:
+                print(self.subj_ids[i])
 
-        mesh = Mesh(filename=self.datapaths[0], load_connectivity=True)
-
-        return self.subj_ids, np.array(vertices), mesh.edges
+        return ids, np.array(vertices), mesh.edges
 
 
     def save_vertices(self, output_filename, ids_filename=None):
