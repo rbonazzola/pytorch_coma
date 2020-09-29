@@ -3,5 +3,5 @@ input_f_folder: "data/datasets/2ch_segmentation"
 pattern: "(.*)/output001.vtk"
 partition: "LV"
 phase: "ED"
-scaled: "scaled"
-output_f_pattern: "{dataset}__{partition}__{phase}__{scaled}.pkl"
+scaled: False
+output_f_pattern: "transforms/cached/2ch_segmentation__LV__ED__non_scaled.pkl"

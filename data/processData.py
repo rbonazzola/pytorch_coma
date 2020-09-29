@@ -1,8 +1,8 @@
 import argparse
-import os
 import pickle
 from cardiac_mesh import *
-
+import sys; sys.path.append("..")
+from utils.logger import logger
 
 class VTKDataset(object):
     """This function generates Numpy binary data files from a set of VTK files"""
@@ -69,6 +69,7 @@ class VTKDataset(object):
 
         mesh = Mesh(filename=self.datapaths[0], load_connectivity=True)
         mesh = Mesh.extractSubpart(mesh, self.partition_ids)
+        edges = mesh.edges
         shape = mesh.points.shape
 
         # tqdm: for progress bar
@@ -80,9 +81,9 @@ class VTKDataset(object):
                 vertices.append(mesh.points)
                 ids.append(self.subj_ids[i])
             else:
-                print(self.subj_ids[i])
+                logger.error("Individual {}".format(self.subj_ids[i]))
 
-        return ids, np.array(vertices), mesh.edges
+        return ids, np.array(vertices), edges
 
 
     def save_vertices(self, output_filename, ids_filename=None):
@@ -127,7 +128,7 @@ def CardiacDataset(data_path, partition, subj_ids=None, N_subj=None):
     )
 
     cardiacDataset = CardiacMesh(
-        vtk_dataset.point_clouds,
+        point_clouds=vtk_dataset.point_clouds,
         edges=vtk_dataset.edges,
         ids=vtk_dataset.ids,
         procrustes_scaling=args.scaled
@@ -156,7 +157,6 @@ def main(args):
     logger.info("Caching pickle file {}...".format(o_file))
     cardiacDataset = CardiacDataset(args.data_folder, args.partition, args.scaled)
     pickle.dump(cardiacDataset, open(o_file, "wb"))
-
 
 
 if __name__ == '__main__':

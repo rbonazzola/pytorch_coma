@@ -1,0 +1,7 @@
+dataset: "2ch_segmentation"
+input_f_folder: "data/datasets/2ch_segmentation"
+pattern: "(.*)/output001.vtk"
+partition: "LV"
+phase: "ED"
+scaled: True
+output_f_pattern: "transforms/cached/2ch_segmentation__LV__ED__scaled.pkl"
