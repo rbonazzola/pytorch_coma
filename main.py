@@ -58,7 +58,7 @@ def log_loss_info(losses, nepochs):
     losses.insert(1, nepochs) # include total number of epochs to the logged message
     logger.info(
         'Epoch {:d}/{:d}:\t'
-        'Train set: {:.5f} (L1) + {:.5f} (KL) = {:.5f},\t'
+        'Train set: {:.5f} (reconstruction) + {:.5f} (KL) = {:.5f},\t'
         'Validation set: {:.5f} + {:.5f} = {:.5f}'
         .format(*losses)
     )
@@ -339,15 +339,19 @@ if __name__ == '__main__':
     parser.add_argument('-od', '--output_dir', default=None, help='path where to store output')
     parser.add_argument('-id', '--data_dir', default=None, help='path where to fetch input data from')
     parser.add_argument('--nTraining', default=None, type=int, help='Number of training samples.')
+    parser.add_argument('--preprocessed_data', default=None, type=str, help='Location of cached input data.')
+    parser.add_argument('--partition', default=None, type=str, help='Cardiac chamber.')
+    parser.add_argument('--procrustes_scaling', default=None, action="store_true", help="Whether to perform scaling transformation after Procrustes alignment (to make mean distance to origin equal to 1).")
+    parser.add_argument('--phase', default=None, help="cardiac phase (1-50|ED|ES)")
     parser.add_argument('--z', default=None, type=int, help='Number of latent variables.')
-    parser.add_argument('--optimizer', default="adam", help='optimizer (adam or sgd).')
-    parser.add_argument('--epoch', default=None, type=int, help='Maximum number of epochs.')
-    parser.add_argument('--stop_if_not_learning', default=None, help='Stop training if losses do not change.')
+    parser.add_argument('--optimizer', default=None, type=str, help='optimizer (adam or sgd).')
+    parser.add_argument('--epoch', default=None, type=int, help='Maximum number of epochs. (NOT IMPLEMENTED)')
     parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly.')
-    parser.add_argument('--dry-run', dest="dry_run", default=False, action="store_true", help='Dry run: just prints out the parameters of the execution but performs no training.')
     parser.add_argument('--kld_weight', type=float, default=None, help='Weight of Kullback-Leibler divergence.')
     parser.add_argument('--learning_rate', type=float, default=None, help='Learning rate.')
-
+    parser.add_argument('--stop_if_not_learning', default=None, action="store_true", help='Stop training if losses do not change.')
+    parser.add_argument('--dry-run', dest="dry_run", default=False, action="store_true",
+                        help='Dry run: just prints out the parameters of the execution but performs no training. (NOT IMPLEMENTED)')
 
     args = parser.parse_args()
 
@@ -377,7 +381,7 @@ if __name__ == '__main__':
         config['output_dir'] = "output/test_{TIMESTAMP}"
     config['test'] = args.test
    
-    def overwrite_config_items(config, args):       
+    def overwrite_config_items(config, args):
       for attr, value in args.__dict__.items():
         if attr in config.keys() and value is not None:
           config[attr] = value
