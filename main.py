@@ -323,6 +323,7 @@ def evaluate(coma, dataloader, device):
             loss += recon_loss
             total_loss += batch_size * loss.item()
 
+    from IPython import embed; embed()
     return total_loss / len(dataloader.dataset), \
            total_recon_loss / len(dataloader.dataset), \
            total_kld_loss / len(dataloader.dataset)
@@ -338,6 +339,7 @@ if __name__ == '__main__':
     parser.add_argument('-od', '--output_dir', default=None, help='path where to store output')
     parser.add_argument('-id', '--data_dir', default=None, help='path where to fetch input data from')
     parser.add_argument('--nTraining', default=None, type=int, help='Number of training samples.')
+    parser.add_argument('--nVal', default=None, type=int, help='Number of validation samples.')
     parser.add_argument('--preprocessed_data', default=None, type=str, help='Location of cached input data.')
     parser.add_argument('--partition', default=None, type=str, help='Cardiac chamber.')
     parser.add_argument('--procrustes_scaling', default=None, action="store_true", help="Whether to perform scaling transformation after Procrustes alignment (to make mean distance to origin equal to 1).")
