@@ -286,7 +286,6 @@ def train(coma, dataloader, optimizer, device):
         if coma.is_variational:
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
-            from IPython import embed; embed()
             loss += coma.kld_weight * kld_loss
             total_kld_loss += batch_size * coma.kld_weight * kld_loss.item()
         total_loss += batch_size * loss.item()
