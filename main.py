@@ -10,6 +10,8 @@ from utils.helpers import *
 import json
 from pprint import pprint
 
+import sys; sys.path.append("data")
+from cardiac_mesh import CardiacMesh
 
 __author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
 
@@ -113,9 +115,7 @@ def main(config):
 
     #TODO: Put this into a separate function
     logger.info('Generating transform matrices')
-    # - A: adjacency matrices
-    # - D: downsampling matrices
-    # - U: upsampling matrices
+    # - A|D|U: adjacency|downsampling|upsampling matrices
     M, A, D, U = mesh_operations.generate_transform_matrices(template_mesh, config['downsampling_factors'])
     A_t = [scipy_to_torch_sparse(a).to(device) for a in A]
     D_t = [scipy_to_torch_sparse(d).to(device) for d in D]
@@ -128,13 +128,13 @@ def main(config):
 
     logger.info("Using %s meshes for training and %s for validation." % (dataset.nTraining, dataset.nVal))
     #TODO: I don't like the way I'm partitioning the data
-    train_loader = get_loader(dataset.vertices_train, dataset.train_ids, batch_size=batch_size, num_workers=workers_thread, shuffle=True)
-    val_loader = get_loader(dataset.vertices_val, dataset.val_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
-    test_loader = get_loader(dataset.vertices_test, dataset.test_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
+    train_loader = get_loader(dataset.point_clouds_train, dataset.train_ids, batch_size=batch_size, num_workers=workers_thread, shuffle=True)
+    val_loader = get_loader(dataset.point_clouds_val, dataset.val_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
+    test_loader = get_loader(dataset.point_clouds_test, dataset.test_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
 
     logger.info('Loading CoMA model')
     #TODO: print architecture of the network
-    coma = Coma(config, D_t, U_t, A_t, num_nodes)
+    coma = Coma(config, dataset.num_features, D_t, U_t, A_t, num_nodes)
 
     #TODO: Use a dictionary to map the configuration parameters to this behaviour
     #TODO: print configuration of the optimizer in the logs

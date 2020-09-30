@@ -6,14 +6,12 @@ __author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
 
 class Coma(torch.nn.Module):
 
-    def __init__(self, config, downsample_matrices, upsample_matrices, adjacency_matrices, num_nodes):
+    def __init__(self, config, num_features, downsample_matrices, upsample_matrices, adjacency_matrices, num_nodes):
         super(Coma, self).__init__()
 
         self.n_layers = config['n_layers']
         self.filters = config['num_conv_filters']
 
-        from utils.helpers import get_cardiac_dataset_len
-        num_features = get_cardiac_dataset_len(config)[-1] # number of features per graph node, typically 3 (x, y, z coordinates)
         self.filters.insert(0, num_features)
 
         self.K = config['polygon_order']

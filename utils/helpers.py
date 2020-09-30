@@ -1,6 +1,6 @@
 import torch
+import sys; sys.path.append("..")
 from VTK.VTKMesh import VTKObject as Mesh
-from cardiac_mesh import CardiacMesh
 from torch.utils.data import TensorDataset, DataLoader
 from subprocess import check_output
 import os
@@ -43,6 +43,7 @@ def scipy_to_torch_sparse(scp_matrix):
 
 
 def get_template_mesh(config):
+    from data.cardiac_mesh import CardiacMesh
     template_file_path = config.get('template_fname', "template/template.vtk")
     partition = config.get('partition', None)
     subpart = CardiacMesh.SUBPARTS_IDS[partition] if partition is not None else None
