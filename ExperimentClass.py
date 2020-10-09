@@ -2,9 +2,12 @@ import os
 import torch
 from utils.helpers import *
 import json
-import utils.mesh_operations
+from utils import mesh_operations
 import re
 import pandas as pd
+
+import sys; sys.path.append("data")
+from cardiac_mesh import CardiacMesh
 
 class Experiment():
 
@@ -76,7 +79,7 @@ class ComaExperiment(Experiment):
         num_nodes = [len(M[i].v) for i in range(len(M))]
 
         from model import Coma
-        coma = Coma(self.config, D_t, U_t, A_t, num_nodes)
+        coma = Coma(self.config, 3, D_t, U_t, A_t, num_nodes)
         coma.load_state_dict(state_dict)
         coma.to(device)
         self.model = coma
@@ -86,9 +89,9 @@ class ComaExperiment(Experiment):
         # To avoid applying Generalized Procrustes Analysis (GPA) again.
         #TODO: change for the current config instead of the default.
         #I am doing this as a temporary workaround, but will be deprecated soon.
-        from config.config_parser import read_default_config
-        config = read_default_config()
-        prealigned_meshes = config["preprocessed_data"]
+        #from config.config_parser import read_default_config
+        #config = read_default_config()
+        prealigned_meshes = self.config["preprocessed_data"]
         prealigned_meshes = pickle.load(open(prealigned_meshes, "rb"))
         return prealigned_meshes
 
