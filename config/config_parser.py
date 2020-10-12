@@ -51,6 +51,8 @@ def set_default_parameters(config):
     config.set('Additional', 'comments', '') # Some kind of reminder of why this experiment was run
     config.set('Additional', 'group_label', '') # A label for the set of runs to which this run belongs
     config.set('Additional', 'label', '')  # A label for this particular run
+    config.set('Additional', 'save_all_models', False)
+    config.set('Additional', 'stop_if_not_learning', True)
 
 
 def read_config(fname):
@@ -102,6 +104,8 @@ def read_config(fname):
     self['comments'] = config.get('Additional', 'comments')                             # TODO: add this option into the scripts
     self['group_label'] = config.get('Additional', 'group_label')                       # TODO: add this option into the scripts
     self['label'] = config.get('Additional', 'label')                                   # TODO: add this option into the scripts
+    self['stop_if_not_learning'] = config.get('Additional', 'stop_if_not_learning')  # TODO: add this option into the scripts
+    self['save_all_models'] = config.get('Additional', 'save_all_models')               # TODO: add this option into the scripts
 
     return self
 

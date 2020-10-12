@@ -9,6 +9,7 @@ from utils import mesh_operations
 from utils.helpers import *
 import json
 from pprint import pprint
+from copy import deepcopy
 
 import sys; sys.path.append("data")
 from cardiac_mesh import CardiacMesh
@@ -153,7 +154,6 @@ def main(config):
         start_epoch = checkpoint['epoch_num']
         coma.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-        # To find if this is fixed in pytorch # <<-- What does this comment mean? Did I make it?
         for state in optimizer.state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
@@ -163,18 +163,13 @@ def main(config):
 
     coma.to(device)
 
-    #TODO: change path for parameter in config
     with open("{}/config.json".format(output_dir), 'w') as fp:
         config["run_id"] = timestamp
         json.dump(config, fp, indent=4)
 
-    if eval_flag:
-        val_loss = evaluate(coma, val_loader, device)
-        logger.info('val loss', val_loss)
-        return
-
     best_val_loss = float('inf')
     loss_history = []
+    last_losses = []
 
     for epoch in range(start_epoch, total_epochs + 1):
 
@@ -182,16 +177,27 @@ def main(config):
         loss_t, recon_loss_t, kld_loss_t = train(coma, train_loader, optimizer, device)
         loss_ev, recon_loss_ev, kld_loss_ev = evaluate(coma, val_loader, device)
         loss_history.append([epoch, recon_loss_t, kld_loss_t, loss_t, recon_loss_ev, kld_loss_ev, loss_ev])
-        # TODO: improve the logging here.
+        #TODO: improve the logging here.
         log_loss_info(loss_history[-1], total_epochs)
-
-        save_model(coma, optimizer, epoch, loss_t, loss_ev, checkpoint_dir)
 
         # To get the best run in the evaluation subset.
         if loss_ev < best_val_loss:
             best_val_loss = loss_ev
             best_epoch = epoch
-            best_model = coma
+            best_model = deepcopy(coma)
+            if not save_all_models:
+                save_model(coma, optimizer, epoch, loss_t, loss_ev, checkpoint_dir)
+
+        if save_all_models:
+            save_model(coma, optimizer, epoch, loss_t, loss_ev, checkpoint_dir)
+
+        if config["stop_if_not_learning"]:
+            if len(last_losses) > 10:
+                current_loss = loss_history[-1][-1]
+                if all([current_loss >= 0.99*x for x in last_losses]):
+                    logging.info("Stopping training early at epoch {}. The network has not been learning in the last few epochs.".format(epoch))
+                    break
+            last_losses = last_losses.append(loss_history[-1][-1])
 
         if opt == 'sgd':
             adjust_learning_rate(optimizer, lr_decay)
@@ -203,15 +209,13 @@ def main(config):
     logging.info("Training finished after %s epochs." % total_epochs)
     logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
 
-    #TODO: change
-    logging.info("Saving best model state in {}/best_model.pkl".format(output_dir))
+    logging.info("Saving best model state in {}/best_model.pkl and last model state in {}/last_model.pkl".format(output_dir, output_dir))
     torch.save(best_model.state_dict(), "{}/best_model.pkl".format(output_dir))
-
-    #TODO: replace path for field in config
-    logging.info("Saving last model state in {}/last_model.pkl".format(output_dir))
     torch.save(coma.state_dict(), "{}/last_model.pkl".format(output_dir))
-
-    # Change this to use the Experiment class.
+   
+    #Generate files of 1) performance (MSE) and 2) latent representations of each mesh 
+    #TODO: Change all this code to use the Experiment class.
+    coma = best_model
     coma.eval()
     z_file = "{}/latent_space.csv".format(output_dir)
     perf_file = "{}/performance.csv".format(output_dir)
@@ -231,7 +235,7 @@ def main(config):
             subset = subsets[i]
             all_subsets += [subset] * len(loader.dataset)
             for batch, ids in loader:
-                # TODO: We are duplicating code here. The best would be to change encoder according to is_variational
+                #TODO: We are duplicating code here. The best would be to change encoder according to is_variational
                 batch = batch.to(device)
                 if coma.is_variational:
                     mu, log_var = coma.encoder(x=batch)
@@ -347,10 +351,12 @@ if __name__ == '__main__':
     parser.add_argument('--z', default=None, type=int, help='Number of latent variables.')
     parser.add_argument('--optimizer', default=None, type=str, help='optimizer (adam or sgd).')
     parser.add_argument('--epoch', default=None, type=int, help='Maximum number of epochs. (NOT IMPLEMENTED)')
-    parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly.')
+    parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly. ')
     parser.add_argument('--kld_weight', type=float, default=None, help='Weight of Kullback-Leibler divergence.')
     parser.add_argument('--learning_rate', type=float, default=None, help='Learning rate.')
-    parser.add_argument('--stop_if_not_learning', default=None, action="store_true", help='Stop training if losses do not change.')
+    parser.add_argument('--stop_if_not_learning', default=None, action="store_true", help='Stop training if losses do not change. (NOT IMPLEMENTED YET)')
+    parser.add_argument('--save_all_models', default=False, action="store_true",
+                        help='Save all models instead of just the best one until the current epoch.')
     parser.add_argument('--dry-run', dest="dry_run", default=False, action="store_true",
                         help='Dry run: just prints out the parameters of the execution but performs no training. (NOT IMPLEMENTED)')
 
