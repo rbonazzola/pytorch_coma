@@ -8,38 +8,33 @@ def set_default_parameters(config):
     config.set('Seed', 'seed', 2)
 
     config.add_section('Input Output')
-    config.set('Input Output', 'visualize', 'False')
     config.set('Input Output', 'data_dir', 'data/meshes/numpy_files/LV_all_subjects/train.npy')
-    config.set('Input Output', 'preprocessed_data', 'data/meshes/numpy_files/LV_all_subjects/LV_GPA_meshes.pkl')
+    config.set('Input Output', 'preprocessed_data', 'data/transforms/cached/2ch_segmentation__LV__ED__non_scaled.pkl')
     config.set('Input Output', 'template_fname', './template/template.vtk')
     config.set('Input Output', 'output_dir', 'output/{TIMESTAMP}')
-    config.set('Input Output', 'ids_file', 'data/meshes/numpy_files/LV_all_subjects/LVED_all_subjects_subj_ids.txt')
     config.set('Input Output', 'partition', 'LV')
-    config.set('Input Output', 'visual_output_dir', '')
 
     # TODO: add these options into the scripts
     config.add_section('Pre-processing Parameters')
-    config.set('Pre-processing Parameters', 'procrustes_type', 'generalized')
     config.set('Pre-processing Parameters', 'procrustes_scaling', 'False')
 
     config.add_section('Model Parameters')
-    config.set('Model Parameters', 'eval', 'False')
     config.set('Model Parameters', 'checkpoint_file', '')
     config.set('Model Parameters', 'n_layers', '4')
     config.set('Model Parameters', 'z', '8')
-    config.set('Model Parameters', 'downsampling_factors', '4, 4, 4, 4')
+    config.set('Model Parameters', 'downsampling_factors', '4, 4, 3, 2')
     config.set('Model Parameters', 'num_conv_filters', '16, 16, 16, 32, 32')
     config.set('Model Parameters', 'polygon_order', '6, 6, 6, 6, 6')        # TODO: Polygon?? Shouldn't it be "polynomial"
     config.set('Model Parameters', 'workers_thread', 8)
-    config.set('Model Parameters', 'optimizer', 'sgd')
+    config.set('Model Parameters', 'optimizer', 'adam')
     config.set('Model Parameters', 'activation_function', 'relu')         # TODO: add this option into the scripts
-    config.set('Model Parameters', 'reconstruction_loss', 'l1')           # TODO: add this option into the scripts
+    config.set('Model Parameters', 'reconstruction_loss', 'mse')           # TODO: add this option into the scripts
     config.set('Model Parameters', 'kld_weight', 0) 
     config.set('Model Parameters', 'weight_loss', 0)                  # TODO: add this option into the scripts
 
     config.add_section('Learning Parameters')
-    config.set('Learning Parameters', 'nTraining', 1600)
-    config.set('Learning Parameters', 'nVal', 200) 
+    config.set('Learning Parameters', 'nTraining', 1000)
+    config.set('Learning Parameters', 'nVal', 1000) 
     config.set('Learning Parameters', 'batch_size', 16)
     config.set('Learning Parameters', 'learning_rate', 8e-3)
     config.set('Learning Parameters', 'learning_rate_decay', 0.99)
@@ -65,19 +60,14 @@ def read_config(fname):
     config.read(fname)
 
     self = {}
-    self['visualize'] = config.getboolean('Input Output', 'visualize')
     self['data_dir'] = config.get('Input Output', 'data_dir')
     self['preprocessed_data'] = config.get('Input Output', 'preprocessed_data')
     self['template_fname'] = config.get('Input Output', 'template_fname')
-    self['visual_output_dir'] = config.get('Input Output', 'visual_output_dir')
     self['output_dir'] = config.get('Input Output', 'output_dir')
     self['partition'] = config.get('Input Output', 'partition')
-    self['ids_file'] = config.get('Input Output', 'ids_file')
 
-    self['procrustes_type'] = config.get('Pre-processing Parameters', 'procrustes_type')
     self['procrustes_scaling'] = config.getboolean('Pre-processing Parameters', 'procrustes_scaling')
 
-    self['eval'] = config.getboolean('Model Parameters', 'eval')
     self['checkpoint_file'] = config.get('Model Parameters', 'checkpoint_file')
     self['n_layers'] = config.getint('Model Parameters', 'n_layers')
     self['z'] = config.getint('Model Parameters', 'z')
@@ -119,7 +109,7 @@ def save_config(config, filename):
 
 
 def save_default_config(replace=True):
-    config_fname = "config_files/default.cfg"
+    config_fname = "../config_files/default.cfg"
     if os.path.exists(config_fname) and replace or not os.path.exists(config_fname):
         config = configparser.RawConfigParser()
         set_default_parameters(config)
@@ -138,7 +128,7 @@ if __name__ == '__main__':
     if not os.path.exists("config_files"):
         os.makedirs("config_files")
 
-    config_fname = os.path.join(pkg_path, 'config_files/default.cfg')
+    config_fname = os.path.join(pkg_path, '../config_files/default.cfg')
     config = configparser.RawConfigParser()
     set_default_parameters(config)
 

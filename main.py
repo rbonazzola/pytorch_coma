@@ -99,7 +99,7 @@ def main(config):
     logger.addHandler(file_handler)
 
     logger.info('Initializing parameters')
-    eval_flag = config['eval']
+    
     lr = config['learning_rate']
     lr_decay = config['learning_rate_decay']
     weight_decay = config['weight_decay']
