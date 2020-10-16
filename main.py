@@ -180,7 +180,7 @@ def main(config):
         #TODO: improve the logging here.
         log_loss_info(loss_history[-1], total_epochs)
 
-        # To get the best run in the evaluation subset.
+        # To get the best run in the validation subset.
         if loss_ev < best_val_loss:
             best_val_loss = loss_ev
             best_epoch = epoch
@@ -193,9 +193,10 @@ def main(config):
 
         if config["stop_if_not_learning"]:
             if len(last_losses) > 20:
-                current_loss = loss_history[-1][-1]
-                if all([current_loss >= 0.99*x for x in last_losses]):
-                    logging.info("Stopping training early at epoch {}. The network has not been learning in the last few epochs.".format(epoch))
+                current_loss = loss_history[-1][-1]                
+                loss_ref = last_losses.pop(0) # loss 20 epochs ago
+                if current_loss >= loss_ref:
+                    logging.info("Stopping training early at epoch {}. The network has not been learning in the last 20 epochs.".format(epoch))
                     break
             last_losses.append(loss_history[-1][-1])
 
@@ -206,7 +207,7 @@ def main(config):
         torch.cuda.synchronize()
 
     save_training_info(loss_history, "{}/training_losses.csv".format(output_dir))
-    logging.info("Training finished after %s epochs." % total_epochs)
+    logging.info("Training finished after %s epochs." % epoch) 
     logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
 
     logging.info("Saving best model state in {}/best_model.pkl and last model state in {}/last_model.pkl".format(output_dir, output_dir))
