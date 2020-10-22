@@ -24,10 +24,11 @@ function(input, output) {
     )
   })
   
-  output$assoc <- renderUI({
+  output$AssocTab <- renderUI({
     fluidPage(
       titlePanel("X vs. Y"),
       selectInput("phenotype_x", "Select variable 1", names(col_types)[col_types != "integer"], selected = "LVEDV"),
+      # selectInput("phenotype_x", "Select variable 1", selected = "LVEDV"),
       selectInput("phenotype_y", "Select variable 2", names(col_types), selected = "LVESV")
     )
   })
@@ -56,6 +57,14 @@ function(input, output) {
     brushedPoints(output$plot, input$plot1_brush) # %>% select(-cardiac_indices)
   })
   
+  # output$qqplot_pooled <- renderImage({
+  #   
+  # })
+  
+  # output$manhattan <- renderImage({
+  #   
+  # })
+  
   #output$brush_info_cardiac <-  DT::renderDataTable({
   #  brushedPoints(df, input$plot1_brush)[, c("ID", cardiac_indices)]
   #})
@@ -66,12 +75,17 @@ function(input, output) {
   
   # Reactive values
   rv <- reactiveValues(data = NULL)
-  rv$params_df <-  DT::renderDataTable(
+  output$params_df <-  DT::renderDataTable(
     # https://yihui.shinyapps.io/DT-selection/
     DT::datatable(params_df, options=list(paging=FALSE)), server=FALSE # server=FALSE to enable row selection
   )
-  rv$row_indices = rv$params_df(input$params_df_rows_selected)
-  print(rv$row_indices)
+  
+  #observe({
+  #  rv$row_indices = rv$params_df(input$params_df_rows_selected)
+  #  print(rv$row_indices)
+  #})
+  #
+  #output$params_df <- rv$params_df
   
   # output$hist <- renderPlot({
   #   pp <- ggplot(df, aes_string(x = input$phenotype))

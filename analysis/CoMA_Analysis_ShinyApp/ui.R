@@ -25,14 +25,17 @@ shinyUI(
           div(DT::dataTableOutput("params_df"), style = "font-size:70%"), br(),
         ),
         conditionalPanel(
-          condition = "input.controlPanel == \"latent_space\" || input.controlPanel == \"assoc\"",
+          condition = "input.controlPanel == \"latent_space\"", # || input.controlPanel == \"assoc\"",
           DT::dataTableOutput("brush_info_z"), br(),
+        ),
+        conditionalPanel(
+          condition = "input.controlPanel == \"gwas\"",
+          imageOutput("qqplot_pooled"), br(),
         )
       )
     )
     
   )
-  
 )
 
 # downloadButton("plotFile", "Download plot"),

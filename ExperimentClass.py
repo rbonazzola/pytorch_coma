@@ -29,12 +29,14 @@ class Experiment():
 
 
 class DefaultPaths():
-    checkpoints_dir = "performance.csv"
+    checkpoints_dir = "checkpoints"
     performance = "performance.csv"
     z = "latent_space.csv"
+    loss_info = "training_losses.csv"
     config_file = "config.json"
     gwas_dir = "GWAS"
     gwas_fp = "GWAS/z{index}.txt"
+
 
 
 class ComaExperiment(Experiment):
@@ -49,7 +51,7 @@ class ComaExperiment(Experiment):
     TO DO: implement methods to write the output files during the execution.
     '''
 
-    def __init__(self, folder='2020-08-18_16-34-10', mode='training', **kwargs):
+    def __init__(self, folder='output/2020-10-15_07-37-37', mode='training', **kwargs):
         super(ComaExperiment, self).__init__(folder)
         self.__run_dir = folder
         self.__checkpoints_dir = kwargs.get("checkpoints_dir", DefaultPaths.checkpoints_dir)
@@ -57,10 +59,12 @@ class ComaExperiment(Experiment):
         self.__z = kwargs.get("z", DefaultPaths.z)
         self.__config = kwargs.get("config_file", DefaultPaths.config_file)
         self.__gwas_dir = kwargs.get("gwas_dir", DefaultPaths.gwas_dir)
-        self.__mode = mode
-        self.load_config()
+        self.__loss_info = kwargs.get("loss_info", DefaultPaths.loss_info)
 
-    def load_config(self):
+        self.__mode = mode
+        self.__load_config()
+
+    def __load_config(self):
         config_file = os.path.join(self.__run_dir, self.__config)
         self.config = json.load(open(config_file))
         # TO FIX
@@ -103,6 +107,9 @@ class ComaExperiment(Experiment):
     def load_perf(self):
         # raise NotImplementedError
         return pd.read_csv(os.path.join(self.__run_dir, self.__performance))
+
+    def load_loss_info(self):
+        return pd.read_csv(os.path.join(self.__run_dir, self.__loss_info))
 
     def write_config(self):
         raise NotImplementedError

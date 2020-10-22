@@ -3,10 +3,10 @@ library(ggplot2)
 theme_set(theme_bw())
 
 summary_plot <- function(loss) {
-  pp <- ggplot(df, aes_string(x = loss))
-  pp <- pp + geom_histogram()
-  pp <- pp + theme_bw()
-  pp
+ # pp <- ggplot(df, aes_string(x = loss))
+ # pp <- pp + geom_histogram()
+ # pp <- pp + theme_bw()
+ # pp
 }
 
 z_density_plot <- function(run_id, z_i, z_j){
@@ -43,7 +43,7 @@ assoc_plot <- function(phenotype_x, phenotype_y) {
   pp <- pp + theme_bw()
   
   # If variable is categorical use box plot, otherwise scatterplot.
-  if (class(df[,phenotype_x]) == "factor")
+  if (class(assoc_df[,phenotype_x]) == "factor")
     pp <- pp + geom_boxplot()
   else
     pp <- pp + geom_point()

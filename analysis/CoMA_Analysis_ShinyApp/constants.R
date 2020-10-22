@@ -1,0 +1,21 @@
+columns_to_remove <- c(
+  "run_id",
+  "activation_function",
+  "eval",
+  "data_dir",
+  "eval",
+  "ids_file",
+  "n_layers",
+  "output_dir",
+  "polygon_order",
+  "procrustes_type",
+  "visual_output_dir",
+  "weight_loss",
+  "workers_thread",
+  "checkpoint_file",
+  "preprocessed_data",
+  "save_all_models",
+  "stop_if_not_learning",
+  "visualize",
+  "template_fname"
+)
