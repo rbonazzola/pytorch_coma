@@ -30,12 +30,20 @@ class Coma(torch.nn.Module):
 
         # Chebyshev convolutions (encoder)
         self.cheb = torch.nn.ModuleList([
-            ChebConv_Coma(self.filters[i], self.filters[i+1], self.K[i]) for i in range(len(self.filters)-2)
+            ChebConv_Coma(
+                self.filters[i],
+                self.filters[i+1],
+                self.K[i]
+            ) for i in range(len(self.filters)-2)
         ])
 
         # Chebyshev deconvolutions (decoder)
         self.cheb_dec = torch.nn.ModuleList([
-            ChebConv_Coma(self.filters[-i-1], self.filters[-i-2], self.K[i]) for i in range(len(self.filters)-1)
+            ChebConv_Coma(
+                self.filters[-i-1],
+                self.filters[-i-2],
+                self.K[i]
+            ) for i in range(len(self.filters)-1)
         ])
 
         self.cheb_dec[-1].bias = None  # No bias for last convolution layer

@@ -1,6 +1,6 @@
 function(input, output) {
   
-  ### UI ###
+  ### UI: SIDE BAR PANEL ###
   
   output$SummTab <- renderUI({
     fluidPage(
@@ -8,28 +8,50 @@ function(input, output) {
     )
   })
   
-  output$PerfTab <- renderUI({
-    fluidPage(
-      titlePanel("CoMA - performance"),
-      selectInput("run_id_", "Select experiment", runs),
-    )
-  })
+  # output$PerfTab <- renderUI({
+  #   fluidPage(
+  #     titlePanel("CoMA - performance"),
+  #     selectInput("run_id_", "Select experiment", runs),
+  #   )
+  # })
   
-  output$ZTab <- renderUI({
+  output$Experiment <- renderUI({
     fluidPage(
-      titlePanel("CoMA - Latent space"),
+      titlePanel("CoMA"),
       selectInput("run_id", "Select experiment", runs),
-      selectInput("z_i", "Select latent variable 1", paste0("z", 0:7)),
-      selectInput("z_j", "Select latent variable 2", paste0("z", 0:7))
-    )
-  })
-  
-  output$AssocTab <- renderUI({
-    fluidPage(
-      titlePanel("X vs. Y"),
-      selectInput("phenotype_x", "Select variable 1", names(col_types)[col_types != "integer"], selected = "LVEDV"),
-      # selectInput("phenotype_x", "Select variable 1", selected = "LVEDV"),
-      selectInput("phenotype_y", "Select variable 2", names(col_types), selected = "LVESV")
+      
+      radioButtons(
+        inputId = "ExperimentPlotType", 
+        choices = c("Performance", "Statistical properties", "Associations", "GWAS"),
+        label = "Select type of analysis"
+      ),
+      
+      # STATISTICAL PROPERTIES
+      
+      
+      # STATISTICAL PROPERTIES
+      conditionalPanel(condition = "input.ExperimentPlotType == \"Statistical properties\"",
+        #TODO: Make the range of z's experiment-dependent
+        selectInput("z_i", "Select latent variable 1", paste0("z", 0:15)),
+        selectInput("z_j", "Select latent variable 2", paste0("z", 0:15))
+      ),
+      
+      # ASSOCIATIONS
+      conditionalPanel(condition = "input.ExperimentPlotType == \"Associations\"",
+        radioButtons(
+          inputId = "variableType", 
+          choices = c("Cardiac indices", "Other variables", "Diagnoses"), 
+          label="Select type of variable"
+        ),
+        selectInput("latent_variable", "Select variable 1", paste0("z", 0:15), selected = "LVESV"),
+        conditionalPanel(condition = "input.variableType == \"Cardiac indices\"",
+          selectInput("yvar", "Select column", cardiac_indices, selected = "LVEDV")
+        ),
+        conditionalPanel(condition = "input.variableType == \"Other variables\"",
+          selectInput("yvar", "Select column", non_cardiac_data, selected = "sex")
+        )
+      ),
+      
     )
   })
   
@@ -39,31 +61,47 @@ function(input, output) {
     )
   })
   
+  output$RunDetails <- renderUI({
+    
+  })
   
-  ############
+  
+  ### OUTPUT ###
 
   output$plot <- renderPlot({
     switch(
       input$controlPanel,
       "summaries" = summary_plot(input$which_loss),
-      "latent_space" = z_density_plot(input$run_id, input$z_i, input$z_j),
-      "performance" = perf_box_plot(input$run_id_),
-      "assoc" = assoc_plot(input$phenotype_x, input$phenotype_y)
+      "experiment_details" = switch(
+        input$ExperimentPlotType,
+        "Performance" = perf_box_plot(input$run_id), 
+        "Statistical properties" = z_density_plot(input$run_id, input$z_i, input$z_j), 
+        "Associations" = assoc_plot(input$run_id, input$latent_variable, input$yvar), 
+        # "GWAS" = 
+      )
       #, "Docs"
     )
   })
   
-  output$brush_info_z <-  DT::renderDataTable({
-    brushedPoints(output$plot, input$plot1_brush) # %>% select(-cardiac_indices)
-  })
-  
-  # output$qqplot_pooled <- renderImage({
-  #   
+  #TOFIX: Error in $.shinyoutput: Reading from shinyoutput object is not allowed.
+  # output$brush_info_z <-  DT::renderDataTable({
+  #   brushedPoints(output$plot, input$plot1_brush) # %>% select(-cardiac_indices)
   # })
   
-  # output$manhattan <- renderImage({
-  #   
-  # })
+  output$qqplot_pooled <- renderImage({
+    NULL 
+  }, deleteFile = TRUE)
+  
+  output$manhattan <- renderImage({
+    NULL 
+  }, deleteFile = TRUE)
+  
+  # Reactive values
+  rv <- reactiveValues(data = NULL)
+  output$params_df <-  DT::renderDT(
+    # https://yihui.shinyapps.io/DT-selection/
+    DT::datatable(params_df, filter = "top", options=list(paging=FALSE)), server=FALSE # server=FALSE to enable row selection
+  )
   
   #output$brush_info_cardiac <-  DT::renderDataTable({
   #  brushedPoints(df, input$plot1_brush)[, c("ID", cardiac_indices)]
@@ -73,38 +111,13 @@ function(input, output) {
   #   brushedPoints(df, input$plot1_brush) %>% select(-cardiac_indices)
   # })
   
-  # Reactive values
-  rv <- reactiveValues(data = NULL)
-  output$params_df <-  DT::renderDataTable(
-    # https://yihui.shinyapps.io/DT-selection/
-    DT::datatable(params_df, options=list(paging=FALSE)), server=FALSE # server=FALSE to enable row selection
-  )
   
   #observe({
   #  rv$row_indices = rv$params_df(input$params_df_rows_selected)
   #  print(rv$row_indices)
   #})
   #
-  #output$params_df <- rv$params_df
   
-  # output$hist <- renderPlot({
-  #   pp <- ggplot(df, aes_string(x = input$phenotype))
-  #   pp <- pp + geom_histogram()
-  #   pp <- pp + theme_bw()
-  #   pp
-  # })
-  # 
-  # output$scatter <- renderPlot({
-  #   pp <- ggplot(df, aes_string(x = input$phenotype_x, y = input$phenotype_y))
-  #   pp <- pp + theme_bw()
-  #   
-  #   # If variable is categorical use box plot, otherwise scatterplot.
-  #   if (class(df[,input$phenotype_x]) == "factor")
-  #     pp <- pp + geom_boxplot() 
-  #   else
-  #     pp <- pp + geom_point() 
-  #   pp
-  # })
   
   # output$click_info <- renderPrint({
   #   # Because it's a ggplot2, we don't need to supply xvar or yvar; if this
@@ -114,5 +127,3 @@ function(input, output) {
   #
   
 }
-
-# input$

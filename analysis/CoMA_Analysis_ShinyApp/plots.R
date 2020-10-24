@@ -9,7 +9,7 @@ summary_plot <- function(loss) {
  # pp
 }
 
-z_density_plot <- function(run_id, z_i, z_j){
+z_density_plot <- function(run_id, z_i, z_j) {
   z_df <- get_z_df(run_id)
   # pp <- ggplot(z_df, aes_string(x = input$z_i))
   # pp <- pp + geom_histogram()
@@ -28,9 +28,8 @@ perf_box_plot <- function(run_id) {
   pp
 }
 
-
 # plot all vs all
-z_all_w_all <- function(run_id){
+z_all_w_all <- function(run_id) {
   z_df <- get_z_df(input$run_id)
   pp <- ggplot(z_df, aes_string(x = input$z_i, y = input$z_j))
   pp <- pp + geom_density_2d()
@@ -38,12 +37,14 @@ z_all_w_all <- function(run_id){
   pp
 }
 
-assoc_plot <- function(phenotype_x, phenotype_y) {
-  pp <- ggplot(assoc_df, aes_string(x = phenotype_x, y = phenotype_y))
-  pp <- pp + theme_bw()
+assoc_plot <- function(run_id, phenotype_x, phenotype_y) {
+  print(run_id)
+  z_df <- get_z_df(run_id)
+  df <- inner_join(assoc_df, z_df)
+  pp <- ggplot(df, aes_string(x = phenotype_x, y = phenotype_y))
   
   # If variable is categorical use box plot, otherwise scatterplot.
-  if (class(assoc_df[,phenotype_x]) == "factor")
+  if (class(df[,phenotype_x]) == "factor")
     pp <- pp + geom_boxplot()
   else
     pp <- pp + geom_point()

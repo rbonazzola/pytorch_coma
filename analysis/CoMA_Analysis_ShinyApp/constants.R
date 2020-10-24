@@ -1,3 +1,14 @@
+METADATA_F <- "data/metadata.csv"
+PARAMS_F <- "data/coma_run_parameters.tsv"
+OUTPUT_DIR <- "data/coma_output"
+INDICES_F <- "data/cardiac_indices.csv"
+
+gwas_paths <- list(
+  "qqplot"="",
+  "manhattan"="",
+  "pooled_qqplot"=""
+)
+
 columns_to_remove <- c(
   "run_id",
   "activation_function",
