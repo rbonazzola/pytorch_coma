@@ -9,14 +9,15 @@ summary_plot <- function(loss) {
  # pp
 }
 
-z_density_plot <- function(run_id, z_i, z_j) {
-  z_df <- get_z_df(run_id)
-  # pp <- ggplot(z_df, aes_string(x = input$z_i))
+z_plot <- function(run_id, z_i, z_j, type="scatter") {
+  pp <- get_z_df(run_id) %>% ggplot(aes_string(x = z_i, y = z_j))
   # pp <- pp + geom_histogram()
-  pp <- ggplot(z_df, aes_string(x = z_i, y = z_j))
-  #pp <- pp + geom_point()
-  pp <- pp + geom_density_2d()
-  pp <- pp + theme_bw()
+  # pp <- pp + geom_point()
+  if (type == "density") {
+    pp <- pp + geom_density_2d()
+  } else if (type == "scatter") {
+    pp <- pp + geom_point()
+  }
   pp
 }
 

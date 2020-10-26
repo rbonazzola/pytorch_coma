@@ -8,13 +8,7 @@ function(input, output) {
     )
   })
   
-  # output$PerfTab <- renderUI({
-  #   fluidPage(
-  #     titlePanel("CoMA - performance"),
-  #     selectInput("run_id_", "Select experiment", runs),
-  #   )
-  # })
-  
+  # EXPERIMENTAL-LEVEL RESULTS
   output$Experiment <- renderUI({
     fluidPage(
       titlePanel("CoMA"),
@@ -25,9 +19,6 @@ function(input, output) {
         choices = c("Performance", "Statistical properties", "Associations", "GWAS"),
         label = "Select type of analysis"
       ),
-      
-      # STATISTICAL PROPERTIES
-      
       
       # STATISTICAL PROPERTIES
       conditionalPanel(condition = "input.ExperimentPlotType == \"Statistical properties\"",
@@ -43,7 +34,7 @@ function(input, output) {
           choices = c("Cardiac indices", "Other variables", "Diagnoses"), 
           label="Select type of variable"
         ),
-        selectInput("latent_variable", "Select variable 1", paste0("z", 0:15), selected = "LVESV"),
+        selectInput("latent_variable", "Select latent variable", paste0("z", 0:15), selected = "z0"),
         conditionalPanel(condition = "input.variableType == \"Cardiac indices\"",
           selectInput("yvar", "Select column", cardiac_indices, selected = "LVEDV")
         ),
@@ -68,40 +59,44 @@ function(input, output) {
   
   ### OUTPUT ###
 
+  observe(
+  {print(input$controlPanel)}
+  )
   output$plot <- renderPlot({
     switch(
       input$controlPanel,
-      "summaries" = summary_plot(input$which_loss),
+      # "summaries" = summary_plot(input$which_loss),
       "experiment_details" = switch(
         input$ExperimentPlotType,
         "Performance" = perf_box_plot(input$run_id), 
-        "Statistical properties" = z_density_plot(input$run_id, input$z_i, input$z_j), 
-        "Associations" = assoc_plot(input$run_id, input$latent_variable, input$yvar), 
+        "Statistical properties" = z_plot(input$run_id, input$z_i, input$z_j), 
+        "Associations" = assoc_plot(input$run_id, input$latent_variable, input$yvar)#, 
         # "GWAS" = 
       )
       #, "Docs"
     )
   })
   
+  output$params_df <-  DT::renderDT(
+    # https://yihui.shinyapps.io/DT-selection/
+    DT::datatable(params_df, filter = "top", options=list(paging=FALSE)), server=FALSE # server=FALSE to enable row selection
+  )
+  
   #TOFIX: Error in $.shinyoutput: Reading from shinyoutput object is not allowed.
   # output$brush_info_z <-  DT::renderDataTable({
   #   brushedPoints(output$plot, input$plot1_brush) # %>% select(-cardiac_indices)
   # })
   
-  output$qqplot_pooled <- renderImage({
-    NULL 
-  }, deleteFile = TRUE)
-  
-  output$manhattan <- renderImage({
-    NULL 
-  }, deleteFile = TRUE)
+  #output$qqplot_pooled <- renderImage({
+  #  NULL 
+  #}, deleteFile = TRUE)
+  #
+  #output$manhattan <- renderImage({
+  #  NULL 
+  #}, deleteFile = TRUE)
   
   # Reactive values
   rv <- reactiveValues(data = NULL)
-  output$params_df <-  DT::renderDT(
-    # https://yihui.shinyapps.io/DT-selection/
-    DT::datatable(params_df, filter = "top", options=list(paging=FALSE)), server=FALSE # server=FALSE to enable row selection
-  )
   
   #output$brush_info_cardiac <-  DT::renderDataTable({
   #  brushedPoints(df, input$plot1_brush)[, c("ID", cardiac_indices)]

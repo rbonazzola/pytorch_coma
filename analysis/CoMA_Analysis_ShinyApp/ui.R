@@ -1,9 +1,8 @@
 shinyUI(
   
-  
   fluidPage(
     
-    includeHTML("www/coma2.html"),  
+    includeHTML("www/coma.html"),  
     # titlePanel("CoMA Results Explorer"),
     
     sidebarPanel(
@@ -11,8 +10,9 @@ shinyUI(
         id = "controlPanel",
         tabPanel(title = "Summaries", uiOutput("SummTab"), value = "summaries"),
         tabPanel(title = "Latent space", uiOutput("Experiment"), value = "experiment_details"),
+        tabPanel(title = "Run Details", value = "run_details"), 
         tabPanel(title = "Docs", htmlOutput("docsTab"), value = "docs"),
-        tabPanel(title = "Run Details", value = "run_details")
+        type="pills"
       )
     ),
   
@@ -25,13 +25,13 @@ shinyUI(
           imageOutput("qqplot_pooled"), br(),
         ),
         conditionalPanel(
-          condition = "input.controlPanel != \"gwas\"",
+          condition = "input.controlPanel == \"experiment_details\" || input.controlPanel == \"summaries\"",
           plotOutput("plot", brush = brushOpts(id = "plot1_brush"))
         ),
         
         ### DATATABLE ###
         conditionalPanel(
-          condition = "input.controlPanel == \"summaries\"",
+          condition = "input.controlPanel == \"run_details\"",
           div(DT::dataTableOutput("params_df"), style = "font-size:70%"), br(),
         ),
         conditionalPanel(
@@ -41,6 +41,5 @@ shinyUI(
       )
     )
     
-  )
-)
+))
 
