@@ -118,9 +118,7 @@ def main(config):
     logger.info('Generating transform matrices')
     # - A|D|U: adjacency|downsampling|upsampling matrices
     M, A, D, U = mesh_operations.generate_transform_matrices(template_mesh, config['downsampling_factors'])
-    A_t = [scipy_to_torch_sparse(a).to(device) for a in A]
-    D_t = [scipy_to_torch_sparse(d).to(device) for d in D]
-    U_t = [scipy_to_torch_sparse(u).to(device) for u in U]
+    A_t, D_t, U_t = ([scipy_to_torch_sparse(x).to(device) for x in X] for X in (A, D, U))
     num_nodes = [len(M[i].v) for i in range(len(M))]
 
     logger.info('Loading dataset')
@@ -134,17 +132,24 @@ def main(config):
     test_loader = get_loader(dataset.point_clouds_test, dataset.test_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
 
     logger.info('Loading CoMA model')
-    #TODO: print architecture of the network
     coma = Coma(config, dataset.num_features, D_t, U_t, A_t, num_nodes)
+    
+    # n_channels = [dataset.num_features] + [x for x in config["num_conv_filters"] for _ in (0,1)]
+    n_channels = [config["num_conv_filters"][0]] + [x for x in config["num_conv_filters"][1:] for _ in (0,1)]
+    n_channels[-1] = 1
+    n_vertices = [x for x in num_nodes for _ in (0,1)] + [config["z"]]
+    architecture = list(zip(n_vertices, n_channels))
+    logger.info('Decoder architecture is:\n' + "\n".join([str(x) for x in architecture]))
+    
+    optimizers_dict = {
+      "adam": torch.optim.Adam(coma.parameters(), lr=lr, betas=(0.5,0.99), weight_decay=weight_decay),
+      "sgd": torch.optim.SGD(coma.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
+    }
 
-    #TODO: Use a dictionary to map the configuration parameters to this behaviour
-    #TODO: print configuration of the optimizer in the logs
-    if opt == 'adam':
-        optimizer = torch.optim.Adam(coma.parameters(), lr=lr, betas=(0.5,0.99), weight_decay=weight_decay)
-    elif opt == 'sgd':
-        optimizer = torch.optim.SGD(coma.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
-    else:
-        raise Exception('No optimizer provided')
+    try:
+        optimizer = optimizers_dict[opt]
+    except KeyError:
+        raise Exception("No valid optimizer provided")
 
     # To continue from a previous run saved in checkpoint_file
     checkpoint_file = config['checkpoint_file']

@@ -13,7 +13,7 @@ def to_df_row(experiment):
         run_id = experiment.config["run_id"]
         for k,v in experiment.config.items():
             config[k] = v if not isinstance(v, list) else ", ".join([str(x) for x in v])
-        config[] =
+        # config[] =
         train = pd.DataFrame(config, index=[run_id])
     except:
         pass
