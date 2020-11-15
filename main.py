@@ -220,17 +220,17 @@ def main(config):
 
         if opt == 'sgd':
             adjust_learning_rate(optimizer, lr_decay)
-
-    if best_val_loss > 0.9:
-        logging.error("The model did not learn. Try changing the parameters of the networks or of the training process.")
-        exit()
-
+    
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
     logging.info("Training finished after %s epochs." % epoch) 
     logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
-    loss_df.to_csv("{}/training_losses.csv".format(output_dir), index=False, float_format="%.5f")
+    loss_df.to_csv("{}/training_losses.csv".format(output_dir), index=False, float_format="%.5f")    
+
+    if best_val_loss > 0.9:
+        logging.error("The model did not learn. Try changing the parameters of the networks or of the training process.")
+        exit()
 
     logging.info("Saving best model state in {}/best_model.pkl and last model state in {}/last_model.pkl".format(output_dir, output_dir))
     torch.save(best_model.state_dict(), "{}/best_model.pkl".format(output_dir))
