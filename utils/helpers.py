@@ -96,16 +96,29 @@ def get_current_commit_hash():
     return check_output(shlex.split("git rev-parse HEAD")).decode().strip()
 
 
-def get_loader(dataset, ids, batch_size, num_workers, shuffle=True):
-    '''
-    :param dataset:
-    :param ids:
-    :param batch_size:
-    :param num_workers:
-    :param shuffle:
-    :return:
-    '''
-    ids = torch.Tensor([int(x) for x in ids])
-    vertices = TensorDataset(torch.Tensor(dataset), ids)
-    loader = DataLoader(vertices, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
-    return loader
+def get_loader(dataset, nTraining, nVal, batch_size, num_workers, shuffle=True):
+
+    from torch.utils.data import Subset
+
+    n_indiv = len(dataset.ids)
+    # from IPython import embed; embed()
+    dataset = TensorDataset(torch.Tensor(dataset.point_clouds), torch.Tensor([int(x) for x in dataset.ids]))    
+    trainLoader = DataLoader(dataset = Subset(dataset,range(nTraining)), batch_size = batch_size, shuffle=shuffle, num_workers=num_workers)
+    valLoader = DataLoader(dataset = Subset(dataset,range(nTraining, nTraining+nVal)), batch_size = 1, shuffle=shuffle, num_workers=num_workers)
+    testLoader = DataLoader(dataset = Subset(dataset,range(nTraining+nVal,n_indiv)), batch_size = 1, shuffle=shuffle, num_workers=num_workers)
+    return trainLoader, valLoader, testLoader
+
+
+# def get_loader(dataset, ids, batch_size, num_workers, shuffle=True):
+#     '''
+#     :param dataset:
+#     :param ids:
+#     :param batch_size:
+#     :param num_workers:
+#     :param shuffle:
+#     :return:
+#     '''
+#     ids = torch.Tensor([int(x) for x in ids])
+#     vertices = TensorDataset(torch.Tensor(dataset), ids)
+#     loader = DataLoader(vertices, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+#     return loader

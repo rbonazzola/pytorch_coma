@@ -60,6 +60,8 @@ def read_config(fname):
     config.read(fname)
 
     self = {}
+    self['seed'] = config.get('Seed', 'seed')
+
     self['data_dir'] = config.get('Input Output', 'data_dir')
     self['preprocessed_data'] = config.get('Input Output', 'preprocessed_data')
     self['template_fname'] = config.get('Input Output', 'template_fname')

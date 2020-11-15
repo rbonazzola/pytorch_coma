@@ -56,13 +56,13 @@ def save_training_info(loss_info, filename):
             handle.write("%s\n" % ( ",".join(["%d"] + ["%.5f"]*(len(row)-1)) % tuple(row) ) )
 
 
-def log_loss_info(losses, nepochs):
-    #TODO: parameterize the reconstruction loss (it doesn't have to be L1)
-    losses.insert(1, nepochs) # include total number of epochs to the logged message
+def log_loss_info(losses, rec_loss_name, wkl):
+    losses = losses[0:3] + [rec_loss_name] + losses[3:]
+    # from IPython import embed; embed()
     logger.info(
-        'Epoch {:d}/{:d}:\t'
-        'Train set: {:.5f} (reconstruction) + {:.5f} (KL) = {:.5f},\t'
-        'Validation set: {:.5f} + {:.5f} = {:.5f}'
+        ('Epoch {:d}/{:d}:\n\t' +
+        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) = {:.5f},\t' +
+        'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} = {:.5f}')
         .format(*losses)
     )
 
@@ -70,11 +70,15 @@ def log_loss_info(losses, nepochs):
 def main(config):
 
     #This function is too long!
-    #TODO: Use the Experiment class to modularize the different steps
+    #TODO IMPORTANT: Use the Experiment class to modularize the different steps
 
     #TODO: Print the commit hashes of all the repositories used (this, VTK, psbody)
     #TODO: Print the library versions
     #TODO: Print the hashes of the data files
+
+    if config['seed'] is not None:
+      torch.manual_seed(config['seed'])
+      # np.random.seed(config['seed'])
 
     logger.info('Current Git commit hash for repository pytorch_coma: %s' % get_current_commit_hash())
 
@@ -103,18 +107,19 @@ def main(config):
     lr = config['learning_rate']
     lr_decay = config['learning_rate_decay']
     weight_decay = config['weight_decay']
-    total_epochs = config['epoch']
-    workers_thread = config['workers_thread']
+    
     opt = config['optimizer']
     batch_size = config['batch_size']
-    is_this_a_test = config['test']
-
+    total_epochs = config['epoch']
+    
+    workers_thread = config['workers_thread']
     device = get_device()
 
+    is_this_a_test = config['test']
+    
     logger.info('Loading template mesh from %s' % config['template_fname'])
     template_mesh = get_template_mesh(config) # Used to extract the connectivity between vertices
 
-    #TODO: Put this into a separate function
     logger.info('Generating transform matrices')
     # - A|D|U: adjacency|downsampling|upsampling matrices
     M, A, D, U = mesh_operations.generate_transform_matrices(template_mesh, config['downsampling_factors'])
@@ -122,34 +127,41 @@ def main(config):
     num_nodes = [len(M[i].v) for i in range(len(M))]
 
     logger.info('Loading dataset')
-    #TODO important: make the partition random.
     dataset = load_cardiac_dataset(config)
 
-    logger.info("Using %s meshes for training and %s for validation." % (dataset.nTraining, dataset.nVal))
-    #TODO: I don't like the way I'm partitioning the data
-    train_loader = get_loader(dataset.point_clouds_train, dataset.train_ids, batch_size=batch_size, num_workers=workers_thread, shuffle=True)
-    val_loader = get_loader(dataset.point_clouds_val, dataset.val_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
-    test_loader = get_loader(dataset.point_clouds_test, dataset.test_ids, batch_size=1, num_workers=workers_thread, shuffle=False)
+    logger.info("Using %s meshes for training and %s for validation." % (config["nTraining"], config["nVal"]))
+    train_loader, val_loader, test_loader = get_loader(dataset, config["nTraining"], config["nVal"], batch_size, workers_thread, shuffle=True)
 
     logger.info('Loading CoMA model')
     coma = Coma(config, dataset.num_features, D_t, U_t, A_t, num_nodes)
     
-    # n_channels = [dataset.num_features] + [x for x in config["num_conv_filters"] for _ in (0,1)]
+    # TODO: Add this into the model Class itself
     n_channels = [config["num_conv_filters"][0]] + [x for x in config["num_conv_filters"][1:] for _ in (0,1)]
     n_channels[-1] = 1
     n_vertices = [x for x in num_nodes for _ in (0,1)] + [config["z"]]
     architecture = list(zip(n_vertices, n_channels))
-    logger.info('Decoder architecture is:\n' + "\n".join([str(x) for x in architecture]))
-    
-    optimizers_dict = {
+    logger.info('Decoder architecture is:\n' + " -> ".join([str(x) for x in architecture]))
+
+    optimizers_menu = {
       "adam": torch.optim.Adam(coma.parameters(), lr=lr, betas=(0.5,0.99), weight_decay=weight_decay),
       "sgd": torch.optim.SGD(coma.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
     }
 
+    losses_menu = {
+      "l1": {"name": "L1", "function": F.l1_loss},
+      "mse": {"name": "MSE", "function": F.mse_loss}
+    }
+
     try:
-        optimizer = optimizers_dict[opt]
+        optimizer = optimizers_menu[opt]
     except KeyError:
         raise Exception("No valid optimizer provided")
+
+    try:
+        rec_loss_fun = losses_menu[config["reconstruction_loss"]]["function"]
+        rec_loss_name = losses_menu[config["reconstruction_loss"]]["name"]
+    except KeyError:
+        raise Exception("No valid reconstruction loss provided")
 
     # To continue from a previous run saved in checkpoint_file
     checkpoint_file = config['checkpoint_file']
@@ -173,53 +185,60 @@ def main(config):
         json.dump(config, fp, indent=4)
 
     best_val_loss = float('inf')
-    loss_history = []
+    
+    loss_df = pd.DataFrame(columns=["epoch", "reconstruction_loss", "kld_loss", "total_loss", "subset"])
     last_losses = []
 
     for epoch in range(start_epoch, total_epochs + 1):
 
-        # logger.info("Training for epoch %s" % epoch)
-        loss_t, recon_loss_t, kld_loss_t = train(coma, train_loader, optimizer, device)
-        loss_ev, recon_loss_ev, kld_loss_ev = evaluate(coma, val_loader, device)
-        loss_history.append([epoch, recon_loss_t, kld_loss_t, loss_t, recon_loss_ev, kld_loss_ev, loss_ev])
-        #TODO: improve the logging here.
-        log_loss_info(loss_history[-1], total_epochs)
+        losses_train = train(coma, train_loader, rec_loss_fun, optimizer, device)
+        losses_val = evaluate(coma, val_loader, rec_loss_fun, device)
+        loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_train) + ["train"]], columns=loss_df.columns))
+        loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_val) + ["validation"]], columns=loss_df.columns))        
+        
+        log_loss_info([epoch, total_epochs] + list(losses_train) + list(losses_val), rec_loss_name, coma.kld_weight)
 
         # To get the best run in the validation subset.
-        if loss_ev < best_val_loss:
-            best_val_loss = loss_ev
+        if losses_val[-1] < best_val_loss:
+            best_val_loss = losses_val[-1]
             best_epoch = epoch
             best_model = copy(coma)
             if not config['save_all_models']:
-                save_model(coma, optimizer, epoch, loss_t, loss_ev, checkpoint_dir)
+                save_model(coma, optimizer, epoch, losses_train[-1], losses_val[-1], checkpoint_dir)
 
         if config['save_all_models']:
-            save_model(coma, optimizer, epoch, loss_t, loss_ev, checkpoint_dir)
+            save_model(coma, optimizer, epoch, losses_train[-1], losses_val[-1], checkpoint_dir)
 
         if config["stop_if_not_learning"]:
-            if len(last_losses) > 20:
-                current_loss = loss_history[-1][-1]                
+            if len(last_losses) > 20:                
+                current_loss = loss_df.iloc[-1]["total_loss"] # last validation loss                
                 loss_ref = last_losses.pop(0) # loss 20 epochs ago
                 if current_loss >= loss_ref:
                     logging.info("Stopping training early at epoch {}. The network has not been learning in the last 20 epochs.".format(epoch))
                     break
-            last_losses.append(loss_history[-1][-1])
+            last_losses.append(loss_df.iloc[-1]["total_loss"])
 
         if opt == 'sgd':
             adjust_learning_rate(optimizer, lr_decay)
 
+    if best_val_loss > 0.9:
+        logging.error("The model did not learn. Try changing the parameters of the networks or of the training process.")
+        exit()
+
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
-    save_training_info(loss_history, "{}/training_losses.csv".format(output_dir))
     logging.info("Training finished after %s epochs." % epoch) 
     logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
+    loss_df.to_csv("{}/training_losses.csv".format(output_dir), index=False, float_format="%.5f")
 
     logging.info("Saving best model state in {}/best_model.pkl and last model state in {}/last_model.pkl".format(output_dir, output_dir))
     torch.save(best_model.state_dict(), "{}/best_model.pkl".format(output_dir))
     torch.save(coma.state_dict(), "{}/last_model.pkl".format(output_dir))
    
-    #Generate files of 1) performance (MSE) and 2) latent representations of each mesh 
+    # Generate files of 
+    # - 1) performance (MSE),
+    # - 2) latent representations of each mesh 
     #TODO: Change all this code to use the Experiment class.
     coma = best_model
     coma.eval()
@@ -280,7 +299,7 @@ def main(config):
     call(shlex.split("touch %s/.finished" % output_dir))
 
 
-def train(coma, dataloader, optimizer, device):
+def train(coma, dataloader, rec_loss_fun, optimizer, device):
     coma.train()
     total_loss = 0
     total_kld_loss = 0
@@ -290,24 +309,24 @@ def train(coma, dataloader, optimizer, device):
         batch_size = data.size(0)
         optimizer.zero_grad()
         out = coma(data)
-        recon_loss = F.mse_loss(out, data.reshape(-1, coma.filters[0]))
+        recon_loss = rec_loss_fun(out, data.reshape(-1, coma.filters[0]))
         total_recon_loss += batch_size * recon_loss.item()
         loss = recon_loss
         if coma.is_variational:
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
             loss += coma.kld_weight * kld_loss
-            total_kld_loss += batch_size * coma.kld_weight * kld_loss.item()
+            total_kld_loss += batch_size * kld_loss.item()
         total_loss += batch_size * loss.item()
         loss.backward()
         optimizer.step()
 
-    return total_loss / len(dataloader.dataset), \
-           total_recon_loss / len(dataloader.dataset), \
-           total_kld_loss / len(dataloader.dataset)
+    return total_recon_loss / len(dataloader.dataset), \
+           total_kld_loss / len(dataloader.dataset), \
+           total_loss / len(dataloader.dataset)
 
 
-def evaluate(coma, dataloader, device):
+def evaluate(coma, dataloader, rec_loss_fun, device):
     #TODO: condense train and evaluate into a single function with "training" and "evaluate" modes
     coma.eval()
     total_loss = 0
@@ -323,19 +342,19 @@ def evaluate(coma, dataloader, device):
                 # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
                 kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
                 loss = coma.kld_weight * kld_loss
-                total_kld_loss += batch_size * coma.kld_weight * kld_loss.item()
+                total_kld_loss += batch_size * kld_loss.item()
             else:
                 z = coma.encoder(x=data)
                 loss = 0
             out = coma.decoder(z)
-            recon_loss = F.mse_loss(out, data.reshape(-1, coma.filters[0]))
+            recon_loss = rec_loss_fun(out, data.reshape(-1, coma.filters[0]))
             total_recon_loss += batch_size * recon_loss.item()
             loss += recon_loss
             total_loss += batch_size * loss.item()
 
-    return total_loss / len(dataloader.dataset), \
-           total_recon_loss / len(dataloader.dataset), \
-           total_kld_loss / len(dataloader.dataset)
+    return total_recon_loss / len(dataloader.dataset), \
+           total_kld_loss / len(dataloader.dataset), \
+           total_loss / len(dataloader.dataset)
 
 
 if __name__ == '__main__':
@@ -363,10 +382,11 @@ if __name__ == '__main__':
     parser.add_argument('--nVal', default=None, type=int, help='Number of validation samples.')
     parser.add_argument('--kld_weight', type=float, default=None, help='Weight of Kullback-Leibler divergence.')
     parser.add_argument('--learning_rate', type=float, default=None, help='Learning rate.')
-    parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly. ')
+    parser.add_argument('--seed', default=None, help="Seed for PyTorch's Random Number Generator.")
     parser.add_argument('--stop_if_not_learning', default=None, action="store_true", help='Stop training if losses do not change.')
     parser.add_argument('--save_all_models', default=False, action="store_true",
                         help='Save all models instead of just the best one until the current epoch.')
+    parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly. ')
     parser.add_argument('--dry-run', dest="dry_run", default=False, action="store_true",
                         help='Dry run: just prints out the parameters of the execution but performs no training.')
 
@@ -389,6 +409,8 @@ if __name__ == '__main__':
     if args.output_dir:
         config['output_dir'] = args.output_dir
 
+    overwrite_config_items(config, args)
+
     if args.test:
         # some small values so that the execution ends quickly
         config['comments'] = "this is a test"
@@ -397,9 +419,7 @@ if __name__ == '__main__':
         config['epoch'] = 3
         config['output_dir'] = "output/test_{TIMESTAMP}"
     config['test'] = args.test
-   
-    overwrite_config_items(config, args) 
-    
+       
     if args.dry_run:
       pprint(config)
       exit()
