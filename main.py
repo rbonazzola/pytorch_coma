@@ -11,6 +11,7 @@ import json
 from pprint import pprint
 from copy import copy
 import logging
+import shutil
 
 # This is necessary in order to be able to import the pkl file with the preprocessed cardiac data
 import sys; sys.path.append("data")
@@ -226,10 +227,11 @@ def main(config):
 
     logging.info("Training finished after %s epochs." % epoch) 
     logging.info("The best model yields validation loss = %.5f (at epoch %s)." % (best_val_loss, str(best_epoch)))
-    loss_df.to_csv("{}/training_losses.csv".format(output_dir), index=False, float_format="%.5f")    
+    loss_df.to_csv("{}/training_losses.csv".format(output_dir), index=False, float_format="%.5f")
 
     if best_val_loss > 0.9:
         logging.error("The model did not learn. Try changing the parameters of the networks or of the training process.")
+        shutil.rmtree(checkpoint_dir)
         exit()
 
     logging.info("Saving best model state in {}/best_model.pkl and last model state in {}/last_model.pkl".format(output_dir, output_dir))
