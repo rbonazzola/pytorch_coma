@@ -1,12 +1,13 @@
 import torch
 import sys; sys.path.append("..")
 from VTK.VTKMesh import VTKObject as Mesh
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader, random_split
 from subprocess import check_output
 import os
 import shlex
 import pickle
 from .logger import logger
+import time
 
 def get_best_gpu_device():
     '''
@@ -24,8 +25,20 @@ def get_best_gpu_device():
 def get_device():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if torch.cuda.is_available():
-      best_gpu = get_best_gpu_device()
-      torch.cuda.set_device(best_gpu)
+      count = 1
+      while True:
+        try:
+          logger.error("Allocating GPU device, try %s..." % count)
+          best_gpu = get_best_gpu_device()
+          torch.cuda.set_device(best_gpu)
+          break
+        except:
+          count += 1
+          time.sleep(5)
+          if count == 10:
+            logger.error("Unable to allocate device %s after 10 tries. Aborting execution..." % best_gpu)
+            exit()
+          pass
       logger.info('Choosing GPU number %s' % torch.cuda.current_device())
     return device
 
@@ -98,14 +111,12 @@ def get_current_commit_hash():
 
 def get_loader(dataset, nTraining, nVal, batch_size, num_workers, shuffle=True):
 
-    from torch.utils.data import Subset
-
     n_indiv = len(dataset.ids)
-    # from IPython import embed; embed()
     dataset = TensorDataset(torch.Tensor(dataset.point_clouds), torch.Tensor([int(x) for x in dataset.ids]))    
-    trainLoader = DataLoader(dataset = Subset(dataset,range(nTraining)), batch_size = batch_size, shuffle=shuffle, num_workers=num_workers)
-    valLoader = DataLoader(dataset = Subset(dataset,range(nTraining, nTraining+nVal)), batch_size = 1, shuffle=shuffle, num_workers=num_workers)
-    testLoader = DataLoader(dataset = Subset(dataset,range(nTraining+nVal,n_indiv)), batch_size = 1, shuffle=shuffle, num_workers=num_workers)
+    datasets = random_split(dataset, [nTraining, nVal, n_indiv - nTraining - nVal])
+    trainLoader =  DataLoader(dataset = datasets[0], batch_size = batch_size, shuffle=shuffle, num_workers=num_workers)
+    valLoader =  DataLoader(dataset = datasets[1], batch_size = 1, shuffle=shuffle, num_workers=num_workers)
+    testLoader =  DataLoader(dataset = datasets[2], batch_size = 1, shuffle=shuffle, num_workers=num_workers)
     return trainLoader, valLoader, testLoader
 
 

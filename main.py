@@ -80,6 +80,8 @@ def main(config):
     if config['seed'] is not None:
       torch.manual_seed(config['seed'])
       # np.random.seed(config['seed'])
+    else:
+      config['seed'] = torch.seed()
 
     logger.info('Current Git commit hash for repository pytorch_coma: %s' % get_current_commit_hash())
 
@@ -231,8 +233,9 @@ def main(config):
 
     if best_val_loss > 0.9:
         logging.error("The model did not learn. Try changing the parameters of the networks or of the training process.")
-        shutil.rmtree(checkpoint_dir)
-        exit()
+        if not is_this_a_test:
+            shutil.rmtree(checkpoint_dir)
+            exit()
 
     logging.info("Saving best model state in {}/best_model.pkl and last model state in {}/last_model.pkl".format(output_dir, output_dir))
     torch.save(best_model.state_dict(), "{}/best_model.pkl".format(output_dir))
@@ -411,17 +414,17 @@ if __name__ == '__main__':
     if args.output_dir:
         config['output_dir'] = args.output_dir
 
-    overwrite_config_items(config, args)
-
     if args.test:
         # some small values so that the execution ends quickly
         config['comments'] = "this is a test"
-        config['nTraining'] = 32
+        config['nTraining'] = 500
         config['nVal'] = 80
-        config['epoch'] = 3
+        config['epoch'] = 20
         config['output_dir'] = "output/test_{TIMESTAMP}"
     config['test'] = args.test
        
+    overwrite_config_items(config, args)
+
     if args.dry_run:
       pprint(config)
       exit()

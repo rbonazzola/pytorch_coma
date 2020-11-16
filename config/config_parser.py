@@ -5,7 +5,7 @@ import configparser
 def set_default_parameters(config):
 
     config.add_section('Seed')
-    config.set('Seed', 'seed', 2)
+    config.set('Seed', 'seed')
 
     config.add_section('Input Output')
     config.set('Input Output', 'data_dir', 'data/meshes/numpy_files/LV_all_subjects/train.npy')
@@ -60,7 +60,10 @@ def read_config(fname):
     config.read(fname)
 
     self = {}
-    self['seed'] = config.get('Seed', 'seed')
+    try:
+      self['seed'] = config.getint('Seed', 'seed')
+    except ValueError:
+      self['seed'] = None
 
     self['data_dir'] = config.get('Input Output', 'data_dir')
     self['preprocessed_data'] = config.get('Input Output', 'preprocessed_data')
