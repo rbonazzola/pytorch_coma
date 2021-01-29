@@ -2,7 +2,9 @@ library(ggplot2)
 
 theme_set(theme_bw())
 
-summary_plot <- function(loss) {
+summary_plot <- function() {
+ 
+ bind_rows()
  # pp <- ggplot(df, aes_string(x = loss))
  # pp <- pp + geom_histogram()
  # pp <- pp + theme_bw()

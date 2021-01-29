@@ -65,7 +65,7 @@ function(input, output) {
   output$plot <- renderPlot({
     switch(
       input$controlPanel,
-      # "summaries" = summary_plot(input$which_loss),
+      "summaries" = summary_plot(input$which_loss),
       "experiment_details" = switch(
         input$ExperimentPlotType,
         "Performance" = perf_box_plot(input$run_id), 

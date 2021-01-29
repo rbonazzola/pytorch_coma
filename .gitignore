@@ -1,6 +1,12 @@
+.Rhistory
+.RData
 *.pyc
 *.npy
 *checkpoint*
 .idea
 __pycache__
 output
+*.csv
+*.png
+data/datasets
+data/transforms

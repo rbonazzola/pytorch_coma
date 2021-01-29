@@ -5,7 +5,9 @@ source("utils.R")
 source("plots.R")
 
 indices_df <- read.csv(INDICES_F)
-params_df <- read.delim(PARAMS_F) %>% select(-all_of(columns_to_remove))
+
+params_df <- read.delim(PARAMS_F) 
+params_df <- params_df %>% select(-all_of(intersect(columns_to_remove, colnames(params_df))))
 assoc_df <- read.csv("data/metadata.csv")
 diagnoses_df <- NULL
 
