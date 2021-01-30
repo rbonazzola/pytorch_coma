@@ -3,6 +3,8 @@ library(tidyverse)
 # install.packages("corrplot")
 library(corrplot)
 
+setwd(system("git rev-parse --show-toplevel", intern = TRUE))
+
 source("analysis/preprocess_ukbb_data.R")
 
 # Correlation of latent variables with traditional indices
