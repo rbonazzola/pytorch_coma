@@ -69,6 +69,7 @@ def get_template_mesh(config):
 
 
 def load_cardiac_dataset(config=None, mode="training"):
+    from data.cardiac_mesh import CardiacMesh
 
     if config is None:
         from config.config_parser import read_default_config
@@ -82,6 +83,8 @@ def load_cardiac_dataset(config=None, mode="training"):
           dataset.nVal = config['nVal']
           dataset.partition_dataset()
     else:
+      logger.info("File {} not found. Creating dataset from scratch based on configuration.".format(config["preprocessed_data"]))
+      print("File {} not found. Creating dataset from scratch based on configuration.".format(config["preprocessed_data"]))
       dataset = CardiacMesh(
           nTraining=config['nTraining'],
           nVal=config['nVal'],

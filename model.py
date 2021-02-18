@@ -101,12 +101,8 @@ class Coma(torch.nn.Module):
         return eps.mul(std).add_(mu) 
 
 
-    def forward(self, data):
-        # x, edge_index = data.x, data.edge_index
-        # x = data.x
-        x = data #.x
-        # batch_size = data.num_graphs
-        batch_size = data.shape[0]
+    def forward(self, x):
+        batch_size = x.shape[0]
         x = x.reshape(batch_size, -1, self.filters[0])
         if self.is_variational:
             self.mu, self.log_var = self.encoder(x)

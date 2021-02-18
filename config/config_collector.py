@@ -7,6 +7,10 @@ import sys; sys.path.append(".")
 import ExperimentClass as exp
 import pandas as pd
 
+'''
+This script creates a file called `all_runs_parameters.csv` with containing the CoMA parameters for each experiment that has been performed
+'''
+
 def to_df_row(experiment):
     try:
         config = {}

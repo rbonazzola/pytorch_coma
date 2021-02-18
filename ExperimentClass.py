@@ -22,10 +22,10 @@ class Experiment():
         return os.path.join(self.checkpoint_folder, "checkpoint_" + str(last) + ".pt")
 
     def load_last_checkpoint(self):
-        raise NotImplementedError
+        return os.path.join(self.checkpoint_folder, "../last_model.pkl")
 
     def load_best_checkpoint(self):
-        raise NotImplementedError
+        return os.path.join(self.checkpoint_folder, "../best_model.pkl")
 
 
 class DefaultPaths():
@@ -72,9 +72,9 @@ class ComaExperiment(Experiment):
 
     def load_model(self):
         device = get_device()
-        chkpt_file = self.get_last_chkpt()
-        checkpoint = torch.load(chkpt_file, map_location=torch.device('cpu'))
-        state_dict = checkpoint.get('state_dict')
+        chkpt_file = self.load_best_checkpoint()
+        state_dict = torch.load(chkpt_file, map_location=torch.device('cpu'))
+        # state_dict = checkpoint.get('state_dict')
         template_mesh = get_template_mesh(self.config)
         M, A, D, U = mesh_operations.generate_transform_matrices(template_mesh, self.config['downsampling_factors'])
         D_t = [scipy_to_torch_sparse(d).to(device) for d in D]
@@ -96,9 +96,13 @@ class ComaExperiment(Experiment):
         return prealigned_meshes
 
 
-    def load_z(self):
+    def load_z(self, inplace=False):
         # raise NotImplementedError
-        return pd.read_csv(os.path.join(self.__run_dir, self.__z))
+        z = pd.read_csv(os.path.join(self.__run_dir, self.__z)).set_index("ID").drop("subset",1)
+        if inplace:
+            self.z = z
+        else:
+            return z
 
     def load_perf(self):
         # raise NotImplementedError
@@ -140,6 +144,22 @@ class ComaExperiment(Experiment):
         open(self.__train_id_file, "w").write("\n".join([str(x) for x in cardiac_data.train_ids]))
         open(self.__val_id_file, "w").write("\n".join([str(x) for x in cardiac_data.val_ids]))
         open(self.__test_id_file, "w").write("\n".join([str(x) for x in cardiac_data.test_ids]))
+
+    def reconstruct(self, mesh):
+        with torch.no_grad():
+          if self.model.is_variational:
+            mu, log_var = self.model.encoder(x=mesh)
+            z = mu
+          else:
+            z = self.model.encoder(x=mesh)
+          mesh_r = self.model.decoder(z)
+        return mesh_r
+
+    def reconstruct_from_z(experiment, z):
+
+        with torch.no_grad():
+          mesh_r = experiment.model.decoder(z)
+        return mesh_r    
 
     def __enter__(self):
         return self
