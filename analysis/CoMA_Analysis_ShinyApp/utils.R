@@ -8,12 +8,12 @@ get_perf_df <- function(run_id) {
   read.csv(file)
 }
 
-read_perf <- function(x, add_run_id = FALSE) { 
-  path_to_perf <- file.path(OUTPUT_DIR, x, "performance.csv")
+read_perf <- function(run_id, add_run_id = FALSE) { 
+  path_to_perf <- file.path(OUTPUT_DIR, run_id, "performance.csv")
   if (file.exists(path_to_perf)) {
     df <- read.csv(path_to_perf)
     if (add_run_id)
-      df$run_id <- x
+      df$run_id <- run_id
     return(df)
   } else {
     return(NULL)

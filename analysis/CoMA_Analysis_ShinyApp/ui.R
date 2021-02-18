@@ -8,9 +8,8 @@ shinyUI(
     sidebarPanel(
       tabsetPanel(
         id = "controlPanel",
-        tabPanel(title = "Summaries", uiOutput("SummTab"), value = "summaries"),
-        tabPanel(title = "Latent space", uiOutput("Experiment"), value = "experiment_details"),
-        tabPanel(title = "Run Details", value = "run_details"), 
+        tabPanel(title = "Results", uiOutput("Results"), value = "results"),
+        tabPanel(title = "Run Details", value = "run_details"),
         tabPanel(title = "Docs", htmlOutput("docsTab"), value = "docs"),
         type="pills"
       )
@@ -21,24 +20,41 @@ shinyUI(
         br(),
         ### MAIN PLOT ###
         conditionalPanel(
-          condition = "input.controlPanel == \"gwas\"",
-          imageOutput("qqplot_pooled"), br(),
+          condition = "input.controlPanel == \"results\"",
+          dataTableOutput("config_for_this_run"),
+          conditionalPanel(
+            condition = "input.ExperimentPlotType == \"Performance\"",
+            plotOutput("performance_plot")
+          ),
+          conditionalPanel(
+            condition = "input.ExperimentPlotType == \"Statistical properties\"",
+            plotOutput("z_scatter_plot")
+          ),
+          conditionalPanel(
+            condition = "input.ExperimentPlotType == \"Associations\"",
+            plotOutput("association_plot", width = "100%")
+          ),
+          conditionalPanel(
+            condition = "input.ExperimentPlotType == \"GWAS\"",
+            dataTableOutput("gwas_hits_summary"),
+            conditionalPanel(
+              condition = "input.GWASPlotType == \"Q-Q plot (all z's pooled)\"",
+              imageOutput("qqplot")
+            ),
+            conditionalPanel(
+              condition = "input.GWASPlotType == \"Manhattan plot\"",
+              imageOutput("manhattan")
+            )
+          )
         ),
-        conditionalPanel(
-          condition = "input.controlPanel == \"experiment_details\" || input.controlPanel == \"summaries\"",
-          plotOutput("plot", brush = brushOpts(id = "plot1_brush"))
-        ),
-        
         ### DATATABLE ###
         conditionalPanel(
           condition = "input.controlPanel == \"run_details\"",
           div(DT::dataTableOutput("params_df"), style = "font-size:70%"), br(),
-        ),
-        conditionalPanel(
-          condition = "input.controlPanel == \"latent_space\"", # || input.controlPanel == \"assoc\"",
-          DT::dataTableOutput("brush_info_z"), br(),
-        ),
+        )
+      
       )
-    )
-    
-))
+      
+    ) # end MAIN PANEL
+  ) # end FLUID PAGE
+) # end SHINY UI

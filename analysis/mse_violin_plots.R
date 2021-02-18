@@ -1,3 +1,7 @@
+source("utils.R")
+
+runs <- basename(Sys.glob("data/coma_output/2020*"))
+
 kk <- inner_join(
   gather_perf(runs),
   params_df %>% select(all_of(relevant_cols)),
@@ -5,9 +9,11 @@ kk <- inner_join(
 )
 
 
-median_mse_per_run <- kk %>% filter(subset=="validation") %>% group_by(run_id) %>% summarise(median=median(mse))
+median_mse_per_run <- kk %>% filter(subset=="test") %>% group_by(run_id) %>% summarise(median_mse=median(mse))
 median_mse_per_run <- inner_join(median_mse_per_run, params_df %>% select(all_of(relevant_cols)),   by=c("run_id"="experiment"))
+
 ss <- median_mse_per_run %>% group_by(z, kld_weight) %>% summarise(best_median_mse=min(median))
+
 best_median_mse_per_run <- inner_join(ss, median_mse_per_run, by=c("best_median_mse"="median", "kld_weight", "z"))
 best_runs <- best_median_mse_per_run$run_id
 
