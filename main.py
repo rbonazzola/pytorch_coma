@@ -57,12 +57,12 @@ def save_training_info(loss_info, filename):
             handle.write("%s\n" % ( ",".join(["%d"] + ["%.5f"]*(len(row)-1)) % tuple(row) ) )
 
 
-def log_loss_info(losses, rec_loss_name, wkl):
+def log_loss_info(losses, rec_loss_name, wkl, wsnp):
     losses = losses[0:3] + [rec_loss_name] + losses[3:]
     # from IPython import embed; embed()
     logger.info(
         ('Epoch {:d}/{:d}:\n\t' +
-        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) = {:.5f},\t' +
+        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) - ' + str(wsnp) + ' * {:.5f} (SNP) = {:.5f},\t' +
         'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} = {:.5f}')
         .format(*losses)
     )
@@ -87,6 +87,7 @@ def main(config):
 
     output_dir = config['output_dir']
     format_tokens = {"TIMESTAMP": timestamp}
+    
     #TODO: Put the format_tokens item into the configuration file
     output_dir = output_dir.format(**format_tokens)
     config['output_dir'] = output_dir
@@ -170,7 +171,7 @@ def main(config):
     checkpoint_file = config['checkpoint_file']
     if checkpoint_file:
         logging.info("Resuming training from previous execution: %s" % checkpoint_file)
-        checkpoint = torch.load(checkpoint_file)
+        checkpoint = torch.load(checkpoint_file, map_location=torch.device('cpu'))
         start_epoch = checkpoint['epoch_num']
         coma.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
@@ -189,7 +190,7 @@ def main(config):
 
     best_val_loss = float('inf')
     
-    loss_df = pd.DataFrame(columns=["epoch", "reconstruction_loss", "kld_loss", "total_loss", "subset"])
+    loss_df = pd.DataFrame(columns=["epoch", "reconstruction_loss", "kld_loss", "snp_loss", "total_loss", "subset"])
     last_losses = []
 
     for epoch in range(start_epoch, total_epochs + 1):
@@ -197,16 +198,16 @@ def main(config):
         losses_train = train(coma, train_loader, rec_loss_fun, optimizer, device)
         losses_val = evaluate(coma, val_loader, rec_loss_fun, device)
         loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_train) + ["train"]], columns=loss_df.columns))
-        loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_val) + ["validation"]], columns=loss_df.columns))        
+        # loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_val) + ["validation"]], columns=loss_df.columns))        
         
-        log_loss_info([epoch, total_epochs] + list(losses_train) + list(losses_val), rec_loss_name, coma.kld_weight)
+        log_loss_info([epoch, total_epochs] + list(losses_train) + list(losses_val), rec_loss_name, coma.kld_weight, 0.1)
 
         # To get the best run in the validation subset.
         if losses_val[-1] < best_val_loss:
             best_val_loss = losses_val[-1]
             best_epoch = epoch
             best_model = copy(coma)
-            if not config['save_all_models']:
+            if not config['save_all_models']:0.1
                 save_model(coma, optimizer, epoch, losses_train[-1], losses_val[-1], checkpoint_dir)
 
         if config['save_all_models']:
@@ -309,7 +310,8 @@ def train(coma, dataloader, rec_loss_fun, optimizer, device):
     total_loss = 0
     total_kld_loss = 0
     total_recon_loss = 0
-    for i, (data, ids) in enumerate(dataloader):
+    total_snp_loss = 0
+    for i, (data, ids, dosage) in enumerate(dataloader):
         data = data.to(device)
         batch_size = data.size(0)
         optimizer.zero_grad()
@@ -317,17 +319,22 @@ def train(coma, dataloader, rec_loss_fun, optimizer, device):
         recon_loss = rec_loss_fun(out, data.reshape(-1, coma.filters[0]))
         total_recon_loss += batch_size * recon_loss.item()
         loss = recon_loss
+        snp_weight = 0.1
+        snp_loss = -snp_weight * (dosage - 0.9846).dot(coma.mu[:,5])
+        total_snp_loss += batch_size * snp_loss.item()
+        loss += snp_loss
         if coma.is_variational:
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
-            loss += coma.kld_weight * kld_loss
             total_kld_loss += batch_size * kld_loss.item()
+            loss += coma.kld_weight * kld_loss            
         total_loss += batch_size * loss.item()
         loss.backward()
         optimizer.step()
 
     return total_recon_loss / len(dataloader.dataset), \
            total_kld_loss / len(dataloader.dataset), \
+           total_snp_loss / len(dataloader.dataset), \
            total_loss / len(dataloader.dataset)
 
 
@@ -337,7 +344,7 @@ def evaluate(coma, dataloader, rec_loss_fun, device):
     total_loss = 0
     total_kld_loss = 0
     total_recon_loss = 0
-    for i, (data, ids) in enumerate(dataloader):
+    for i, (data, ids, dosages) in enumerate(dataloader):
         data = data.to(device)
         batch_size = data.size(0)
         with torch.no_grad():
@@ -373,12 +380,14 @@ if __name__ == '__main__':
        
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
 
-    parser.add_argument('-c', '--conf', help='path of config file', default="config_files/default.cfg")
+    parser.add_argument('-c', '--conf', help='path of config file', default="config_files/default.config")
     parser.add_argument('-od', '--output_dir', default=None, help='path where to store output')
     parser.add_argument('-id', '--data_dir', default=None, help='path where to fetch input data from')
     parser.add_argument('--preprocessed_data', default=None, type=str, help='Location of cached input data.')
     parser.add_argument('--partition', default=None, type=str, help='Cardiac chamber.')
-    parser.add_argument('--procrustes_scaling', default=False, action="store_true", help="Whether to perform scaling transformation after Procrustes alignment (to make mean distance to origin equal to 1).")
+    parser.add_argument('--procrustes_scaling', default=False, action="store_true",
+                        help="Whether to perform scaling transformation after Procrustes alignment (to make mean distance to origin equal to 1).")
+    parser.add_argument('--checkpoint_file', default=None, type=str, help='Checkpoint file from which to resume previous training (relative to repository root directory).')
     parser.add_argument('--phase', default=None, help="cardiac phase (1-50|ED|ES)")
     parser.add_argument('--z', default=None, type=int, help='Number of latent variables.')
     parser.add_argument('--optimizer', default=None, type=str, help='optimizer (adam or sgd).')
@@ -388,10 +397,12 @@ if __name__ == '__main__':
     parser.add_argument('--kld_weight', type=float, default=None, help='Weight of Kullback-Leibler divergence.')
     parser.add_argument('--learning_rate', type=float, default=None, help='Learning rate.')
     parser.add_argument('--seed', default=None, help="Seed for PyTorch's Random Number Generator.")
-    parser.add_argument('--stop_if_not_learning', default=None, action="store_true", help='Stop training if losses do not change.')
+    parser.add_argument('--stop_if_not_learning', default=None, action="store_true",
+                        help='Stop training if losses do not change.')
     parser.add_argument('--save_all_models', default=False, action="store_true",
                         help='Save all models instead of just the best one until the current epoch.')
-    parser.add_argument('--test', default=False, action="store_true", help='Set this flag if you just want to test whether the code executes properly. ')
+    parser.add_argument('--test', default=False, action="store_true",
+                        help='Set this flag if you just want to test whether the code executes properly. ')
     parser.add_argument('--dry-run', dest="dry_run", default=False, action="store_true",
                         help='Dry run: just prints out the parameters of the execution but performs no training.')
 

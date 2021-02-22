@@ -1,108 +1,131 @@
 import os
 import configparser
+import yaml
+
+def get_repo_rootdir():
+    import shlex
+    from subprocess import check_output
+    repo_rootdir = check_output(shlex.split("git rev-parse --show-toplevel")).strip().decode('ascii')
+    return repo_rootdir
 
 
-def set_default_parameters(config):
-
-    config.add_section('Seed')
-    config.set('Seed', 'seed')
-
-    config.add_section('Input Output')
-    config.set('Input Output', 'data_dir', 'data/meshes/numpy_files/LV_all_subjects/train.npy')
-    config.set('Input Output', 'preprocessed_data', 'data/transforms/cached/2ch_segmentation__LV__ED__non_scaled.pkl')
-    config.set('Input Output', 'template_fname', './template/template.vtk')
-    config.set('Input Output', 'output_dir', 'output/{TIMESTAMP}')
-    config.set('Input Output', 'partition', 'LV')
-
-    # TODO: add these options into the scripts
-    config.add_section('Pre-processing Parameters')
-    config.set('Pre-processing Parameters', 'procrustes_scaling', 'False')
-
-    config.add_section('Model Parameters')
-    config.set('Model Parameters', 'checkpoint_file', '')
-    config.set('Model Parameters', 'n_layers', '4')
-    config.set('Model Parameters', 'z', '8')
-    config.set('Model Parameters', 'downsampling_factors', '4, 4, 3, 2')
-    config.set('Model Parameters', 'num_conv_filters', '16, 16, 16, 32, 32')
-    config.set('Model Parameters', 'polygon_order', '6, 6, 6, 6, 6')        # TODO: Polygon?? Shouldn't it be "polynomial"
-    config.set('Model Parameters', 'workers_thread', 8)
-    config.set('Model Parameters', 'optimizer', 'adam')
-    config.set('Model Parameters', 'activation_function', 'relu')         # TODO: add this option into the scripts
-    config.set('Model Parameters', 'reconstruction_loss', 'mse')           # TODO: add this option into the scripts
-    config.set('Model Parameters', 'kld_weight', 0) 
-    config.set('Model Parameters', 'weight_loss', 0)                  # TODO: add this option into the scripts
-
-    config.add_section('Learning Parameters')
-    config.set('Learning Parameters', 'nTraining', 1000)
-    config.set('Learning Parameters', 'nVal', 1000) 
-    config.set('Learning Parameters', 'batch_size', 16)
-    config.set('Learning Parameters', 'learning_rate', 8e-3)
-    config.set('Learning Parameters', 'learning_rate_decay', 0.99)
-    config.set('Learning Parameters', 'weight_decay', 5e-4) ### What's this??
-    config.set('Learning Parameters', 'epoch', 300)
+def is_yaml_file(x):
+    if isinstance(x, str):
+        return x.endswith("yaml") or x.endswith("yml")
+    return False
 
 
-    config.add_section('Additional')
-    config.set('Additional', 'comments', '') # Some kind of reminder of why this experiment was run
-    config.set('Additional', 'group_label', '') # A label for the set of runs to which this run belongs
-    config.set('Additional', 'label', '')  # A label for this particular run
-    config.set('Additional', 'save_all_models', False)
-    config.set('Additional', 'stop_if_not_learning', True)
+def unfold_config(token):
+    '''
+    Parameters: a recursive structure composed of a path to a yaml file or a dictionary composed of such structures.
+    Returns: A dictionary with all the yaml files replaces by their content.
+    '''
+    repo_rootdir = get_repo_rootdir()
+    yaml_dir = os.path.join(repo_rootdir, "config_files")
+    if is_yaml_file(token):
+        #TODO: COMMENT AND DOCUMENT THIS!!!
+        try:
+            token = yaml.safe_load(open(token))
+        except FileNotFoundError:
+            kk = open(os.path.join(yaml_dir, token))
+            token = yaml.safe_load(kk)
+    if isinstance(token, dict):
+        for k, v in token.items():
+            token[k] = unfold_config(v)
+    return token
 
 
 def read_config(fname):
+
+    import json
 
     if not os.path.exists(fname):
         print('Config not found %s' % fname)
         return
 
-    config = configparser.RawConfigParser()
-    config.read(fname)
+    config = json.load(open(fname, "rt"))
+    
+    # Coerce the items into the correct data types
 
-    self = {}
-    try:
-      self['seed'] = config.getint('Seed', 'seed')
-    except ValueError:
-      self['seed'] = None
+    config['seed'] = int(config['seed'])
+    config['procrustes_scaling'] = bool(config['procrustes_scaling'])
 
-    self['data_dir'] = config.get('Input Output', 'data_dir')
-    self['preprocessed_data'] = config.get('Input Output', 'preprocessed_data')
-    self['template_fname'] = config.get('Input Output', 'template_fname')
-    self['output_dir'] = config.get('Input Output', 'output_dir')
-    self['partition'] = config.get('Input Output', 'partition')
+    config['n_layers'] = int(config['n_layers'])
+    config['z'] = int(config['z'])
+    
+    # config['downsampling_factors'] =  [int(x) for x in config['downsampling_factors'].split(',')]
+    # config['num_conv_filters'] = [int(x) for x in config['num_conv_filters'].split(',')]
+    # config['polygon_order'] = [int(x) for x in config['polygon_order'].split(',')]
+    
+    config['workers_thread'] = int(config['workers_thread'])
 
-    self['procrustes_scaling'] = config.getboolean('Pre-processing Parameters', 'procrustes_scaling')
+    config['kld_weight'] = float(config['kld_weight'])
 
-    self['checkpoint_file'] = config.get('Model Parameters', 'checkpoint_file')
-    self['n_layers'] = config.getint('Model Parameters', 'n_layers')
-    self['z'] = config.getint('Model Parameters', 'z')
-    self['downsampling_factors'] =  [int(x) for x in config.get('Model Parameters', 'downsampling_factors').split(',')]
-    self['num_conv_filters'] = [int(x) for x in config.get('Model Parameters', 'num_conv_filters').split(',')]
-    self['polygon_order'] = [int(x) for x in config.get('Model Parameters', 'polygon_order').split(',')]
-    self['workers_thread'] = config.getint('Model Parameters', 'workers_thread')
-    self['optimizer'] = config.get('Model Parameters', 'optimizer')
+    config['weight_loss'] = config.get('Model Parameters', 'weight_loss') # TODO: add this option into the scripts
 
-    self['activation_function'] = config.get('Model Parameters', 'activation_function') # TODO: add this option into the scripts
-    self['reconstruction_loss'] = config.get('Model Parameters', 'reconstruction_loss') # TODO: add this option into the scripts
-    self['kld_weight'] = config.getfloat('Model Parameters', 'kld_weight') 
+    config['nVal'] = int(config['nVal'])
+    config['nTraining'] = int(config['nTraining'])
+    config['batch_size'] = int(config['batch_size'])
+    config['learning_rate'] = float(config['learning_rate'])
+    config['learning_rate_decay'] = float(config['learning_rate_decay'])
+    config['weight_decay'] = float(config['weight_decay'])
+    config['epoch'] = int(config['epoch'])
 
-    self['weight_loss'] = config.get('Model Parameters', 'weight_loss')                 # TODO: add this option into the scripts
+    config['stop_if_not_learning'] = bool(config.get('stop_if_not_learning', True))
+    config['save_all_models'] = bool(config.get('save_all_models', False))
 
-    self['nVal'] = config.getint('Learning Parameters', 'nVal') 
-    self['nTraining'] = config.getint('Learning Parameters', 'nTraining') 
-    self['batch_size'] = config.getint('Learning Parameters', 'batch_size')
-    self['learning_rate'] = config.getfloat('Learning Parameters', 'learning_rate')
-    self['learning_rate_decay'] = config.getfloat('Learning Parameters', 'learning_rate_decay')
-    self['weight_decay'] = config.getfloat('Learning Parameters', 'weight_decay')
-    self['epoch'] = config.getint('Learning Parameters', 'epoch')
+    return(config)
 
-    self['comments'] = config.get('Additional', 'comments')                             # TODO: add this option into the scripts
-    self['group_label'] = config.get('Additional', 'group_label')                       # TODO: add this option into the scripts
-    self['label'] = config.get('Additional', 'label')                                   # TODO: add this option into the scripts
-    self['stop_if_not_learning'] = config.get('Additional', 'stop_if_not_learning')  # TODO: add this option into the scripts
-    self['save_all_models'] = config.get('Additional', 'save_all_models')               # TODO: add this option into the scripts
+# def read_config(fname):
 
-    return self
+#     if not os.path.exists(fname):
+#         print('Config not found %s' % fname)
+#         return
+
+#     config = configparser.RawConfigParser()
+#     config.read(fname)
+
+#     self = {}
+#     try:
+#       self['seed'] = config.getint('Seed', 'seed')
+#     except ValueError:
+#       self['seed'] = None
+
+
+#     self['procrustes_scaling'] = config.getboolean('Pre-processing Parameters', 'procrustes_scaling')
+
+#     self['checkpoint_file'] = config.get('Model Parameters', 'checkpoint_file')
+
+#     self['n_layers'] = config.getint('Model Parameters', 'n_layers')
+#     self['z'] = config.getint('Model Parameters', 'z')
+#     self['downsampling_factors'] =  [int(x) for x in config.get('Model Parameters', 'downsampling_factors').split(',')]
+#     self['num_conv_filters'] = [int(x) for x in config.get('Model Parameters', 'num_conv_filters').split(',')]
+#     self['polygon_order'] = [int(x) for x in config.get('Model Parameters', 'polygon_order').split(',')]
+#     self['optimizer'] = config.get('Model Parameters', 'optimizer')
+
+#     self['workers_thread'] = config.getint('Model Parameters', 'workers_thread')
+
+#     self['activation_function'] = config.get('Model Parameters', 'activation_function') # TODO: add this option into the scripts
+#     self['reconstruction_loss'] = config.get('Model Parameters', 'reconstruction_loss') # TODO: add this option into the scripts
+#     self['kld_weight'] = config.getfloat('Model Parameters', 'kld_weight') 
+
+#     self['weight_loss'] = config.get('Model Parameters', 'weight_loss')                 # TODO: add this option into the scripts
+
+#     self['nVal'] = config.getint('Learning Parameters', 'nVal') 
+#     self['nTraining'] = config.getint('Learning Parameters', 'nTraining') 
+#     self['batch_size'] = config.getint('Learning Parameters', 'batch_size')
+#     self['learning_rate'] = config.getfloat('Learning Parameters', 'learning_rate')
+#     self['learning_rate_decay'] = config.getfloat('Learning Parameters', 'learning_rate_decay')
+#     self['weight_decay'] = config.getfloat('Learning Parameters', 'weight_decay')
+#     self['epoch'] = config.getint('Learning Parameters', 'epoch')
+
+#     self['comments'] = config.get('Additional', 'comments')                             # TODO: add this option into the scripts
+#     self['group_label'] = config.get('Additional', 'group_label')                       # TODO: add this option into the scripts
+#     self['label'] = config.get('Additional', 'label')                                   # TODO: add this option into the scripts
+#     self['stop_if_not_learning'] = config.get('Additional', 'stop_if_not_learning')  # TODO: add this option into the scripts
+#     self['save_all_models'] = config.get('Additional', 'save_all_models')               # TODO: add this option into the scripts
+
+#     return self
 
 
 def save_config(config, filename):
@@ -138,55 +161,3 @@ if __name__ == '__main__':
     set_default_parameters(config)
 
     save_config(config, config_fname)
-
-
-class Config:
-
-    def __init__(self, config_fname):
-
-        raise NotImplementedError
-
-        #TODO: finish this and replace the current approach
-        config = configparser.RawConfigParser()
-        config.read(config_fname)
-
-        self.visualize = config.getboolean('Input Output', 'visualize')
-        self.data_dir = config.get('Input Output', 'data_dir')
-        self.checkpoint_dir = config.get('Input Output', 'checkpoint_dir')
-        self.template_fname = config.get('Input Output', 'template_fname')
-        self.visual_output_dir = config.get('Input Output', 'visual_output_dir')
-
-        self.procrustes_type = config.get('Pre-processing Parameters', 'procrustes_type')
-        self.procrustes_scaling = config.getboolean('Pre-processing Parameters', 'procrustes_scaling')
-
-        self.eval = config.getboolean('Model Parameters', 'eval')
-        self.z = config.getint('Model Parameters', 'z')
-        self.downsampling_factors = [int(x) for x in
-                                                config.get('Model Parameters', 'downsampling_factors').split(',')]
-        self.num_conv_filters = [int(x) for x in
-                                            config.get('Model Parameters', 'num_conv_filters').split(',')]
-        self.polygon_order = [int(x) for x in config.get('Model Parameters', 'polygon_order').split(',')]
-        self.workers_thread = config.getint('Model Parameters', 'workers_thread')
-        self.optimizer = config.get('Model Parameters', 'optimizer')
-
-        self.activation_function = config.get('Model Parameters',
-                                                         'activation_function')  # TODO: add this option into the scripts
-        self.reconstruction_loss = config.get('Model Parameters',
-                                                         'reconstruction_loss')  # TODO: add this option into the scripts
-        self.variational_loss = config.get('Model Parameters',
-                                                      'variational_loss')  # TODO: add this option into the scripts
-        self.weight_loss = config.get('Model Parameters',
-                                                 'weight_loss')  # TODO: add this option into the scripts
-
-        self.nVal = config.getint('Learning Parameters', 'nVal')  # TODO: add this option into the scripts
-        self.nTraining = config.getfloat('Learning Parameters',
-                                                    'nTraining')  # TODO: add this option into the scripts
-        self.batch_size = config.getint('Learning Parameters', 'batch_size')
-        self.learning_rate = config.getfloat('Learning Parameters', 'learning_rate')
-        self.learning_rate_decay = config.getfloat('Learning Parameters', 'learning_rate_decay')
-        self.weight_decay = config.getfloat('Learning Parameters', 'weight_decay')
-        self.epoch = config.getint('Learning Parameters', 'epoch')
-
-        self.comments = config.get('Additional', 'comments')  # TODO: add this option into the scripts
-        self.group_label = config.get('Additional', 'group_label')  # TODO: add this option into the scripts
-        self.label = config.get('Additional', 'label')  # TODO: add this option into the scripts

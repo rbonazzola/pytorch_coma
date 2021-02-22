@@ -123,6 +123,33 @@ def get_loader(dataset, nTraining, nVal, batch_size, num_workers, shuffle=True):
     return trainLoader, valLoader, testLoader
 
 
+def get_dosages(snpfile):
+    import pandas as pd
+    rs = pd.read_csv(snpfile, skiprows=4, sep="\t")
+    rs  = rs.set_index(rs.ID).iloc[:,9:]
+    rs = rs.applymap(lambda x: x.split(":")[1].split(",").index('1'))
+    samples = rs.columns
+    rs = rs.values
+    return {samples[i]: rs[0,i] for i,_ in enumerate(samples)}  
+
+
+def get_loader(dataset, nTraining, nVal, batch_size, num_workers, shuffle=True):
+
+    import numpy as np
+
+    dosage = get_dosages("data/genotypes/rs11153730.vcf")
+    mean_dosage = np.array(list(dosage.values())).mean()
+    dosage = np.array([dosage.get(id, mean_dosage) for id in dataset.ids])
+    dataset.dosage = dosage
+    n_indiv = len(dataset.ids)
+    
+    dataset = TensorDataset(torch.Tensor(dataset.point_clouds), torch.Tensor([int(x) for x in dataset.ids]), torch.Tensor(dataset.dosage))
+    datasets = random_split(dataset, [nTraining, nVal, n_indiv - nTraining - nVal])
+    trainLoader =  DataLoader(dataset = datasets[0], batch_size = batch_size, shuffle=shuffle, num_workers=num_workers)
+    valLoader =  DataLoader(dataset = datasets[1], batch_size = 1, shuffle=shuffle, num_workers=num_workers)
+    testLoader =  DataLoader(dataset = datasets[2], batch_size = 1, shuffle=shuffle, num_workers=num_workers)
+    return trainLoader, valLoader, testLoader
+
 # def get_loader(dataset, ids, batch_size, num_workers, shuffle=True):
 #     '''
 #     :param dataset:
