@@ -17,6 +17,7 @@ import numpy as np
 # This is necessary in order to be able to import the pkl file with the preprocessed cardiac data
 import sys; sys.path.append("data")
 from cardiac_mesh import CardiacMesh
+WSNP=1
 
 __author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
 
@@ -63,7 +64,7 @@ def log_loss_info(losses, rec_loss_name, wkl, wsnp):
     # from IPython import embed; embed()
     logger.info(
         ('Epoch {:d}/{:d}:\n\t' +
-        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) - ' + str(wsnp) + ' * {:.5f} (SNP) = {:.5f},\t' +
+        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) + (' + str(wsnp) + ' * {:.5f} (SNP) = {:.5f}),\t' +
         'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} = {:.5f}' + ' (correlation, p-value: {})')
         .format(*losses)
     )
@@ -194,6 +195,8 @@ def main(config):
     loss_df = pd.DataFrame(columns=["epoch", "reconstruction_loss", "kld_loss", "snp_loss", "total_loss", "subset"])
     last_losses = []
 
+    print(evaluate(coma,train_loader, rec_loss_fun, device))
+
     for epoch in range(start_epoch, total_epochs + 1):
 
         losses_train = train(coma, train_loader, rec_loss_fun, optimizer, device)
@@ -201,7 +204,7 @@ def main(config):
         loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_train) + ["train"]], columns=loss_df.columns))
         # loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_val) + ["validation"]], columns=loss_df.columns))        
         
-        log_loss_info([epoch, total_epochs] + list(losses_train) + list(losses_val), rec_loss_name, coma.kld_weight, 0.1)
+        log_loss_info([epoch, total_epochs] + list(losses_train) + list(losses_val), rec_loss_name, coma.kld_weight, WSNP)
 
         # To get the best run in the validation subset.
         if losses_val[-2] < best_val_loss:
@@ -266,7 +269,7 @@ def main(config):
         for i, loader in enumerate(loader_list):
             subset = subsets[i]
             all_subsets += [subset] * len(loader.dataset)
-            for batch, ids in loader:
+            for batch, ids, dosage in loader:
                 #TODO: We are duplicating code here. The best would be to change encoder according to is_variational
                 batch = batch.to(device)
                 if coma.is_variational:
@@ -320,10 +323,17 @@ def train(coma, dataloader, rec_loss_fun, optimizer, device):
         recon_loss = rec_loss_fun(out, data.reshape(-1, coma.filters[0]))
         total_recon_loss += batch_size * recon_loss.item()
         loss = recon_loss
-        snp_weight = 0.1
-        snp_loss = -snp_weight * (dosage - 0.9846).cuda().dot(coma.mu[:,5] - torch.mean(coma.mu[:,5])) / torch.std(coma.mu[:,5])
+        snp_weight = WSNP
+
+        ddosage = dosage - 0.9846
+        ddosage /= torch.sqrt(torch.sum(dosage ** 2))
+        dz = coma.mu[:,5] - torch.mean(coma.mu[:,5])
+        snp_loss = torch.sum(ddosage.cuda() * dz.cuda()) 
+        snp_loss *= torch.rsqrt(torch.sum(dz**2))
+        snp_loss *= torch.rsqrt(torch.sum(ddosage**2))
+        # snp_loss = - snp_weight * ((dosage - 0.9846)/np.sqrt(0.9846*(1-0.9846/2))).cuda().dot(coma.mu[:,5] - torch.mean(coma.mu[:,5])) / torch.std(coma.mu[:,5])
         total_snp_loss += batch_size * snp_loss.item()
-        loss += snp_loss
+        loss -= snp_weight * snp_loss
         if coma.is_variational:
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
@@ -351,23 +361,29 @@ def evaluate(coma, dataloader, rec_loss_fun, device):
         data = data.to(device)
         batch_size = data.size(0)
         with torch.no_grad():
+            out = coma(data)
             if coma.is_variational:
-                mu, log_var = coma.encoder(x=data)
-                z = mu # coma.sampling(mu, log_var)
+                # mu, log_var = coma.encoder(x=data)
+                # z = mu # coma.sampling(mu, log_var)
                 # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
                 kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
                 loss = coma.kld_weight * kld_loss
                 total_kld_loss += batch_size * kld_loss.item()
             else:
-                z = coma.encoder(x=data)
+                # z = coma.encoder(x=data)
                 loss = 0
-            out = coma.decoder(z)
+            # out = coma.decoder(z)
             recon_loss = rec_loss_fun(out, data.reshape(-1, coma.filters[0]))
             total_recon_loss += batch_size * recon_loss.item()
             loss += recon_loss
             total_loss += batch_size * loss.item()
-        mus.append(mu[:,5].item())
-        dosages.append(dosage.item())
+        if len(dosage) == 1:
+          mus.append(coma.mu[:,5].item())
+          dosages.append(dosage.item())
+        else:
+          from IPython import embed; embed()
+          mus.extend(coma.mu[:,5].tolist())
+          dosages.append(dosage.tolist())
     
     return total_recon_loss / len(dataloader.dataset), \
            total_kld_loss / len(dataloader.dataset), \
