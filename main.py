@@ -12,7 +12,8 @@ from pprint import pprint
 from copy import copy
 import logging
 import shutil
-
+from scipy import stats
+import numpy as np
 # This is necessary in order to be able to import the pkl file with the preprocessed cardiac data
 import sys; sys.path.append("data")
 from cardiac_mesh import CardiacMesh
@@ -63,7 +64,7 @@ def log_loss_info(losses, rec_loss_name, wkl, wsnp):
     logger.info(
         ('Epoch {:d}/{:d}:\n\t' +
         'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) - ' + str(wsnp) + ' * {:.5f} (SNP) = {:.5f},\t' +
-        'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} = {:.5f}')
+        'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} = {:.5f}' + ' (correlation, p-value: {})')
         .format(*losses)
     )
 
@@ -171,7 +172,7 @@ def main(config):
     checkpoint_file = config['checkpoint_file']
     if checkpoint_file:
         logging.info("Resuming training from previous execution: %s" % checkpoint_file)
-        checkpoint = torch.load(checkpoint_file, map_location=torch.device('cpu'))
+        checkpoint = torch.load(checkpoint_file, map_location='cuda:0')
         start_epoch = checkpoint['epoch_num']
         coma.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
@@ -203,11 +204,11 @@ def main(config):
         log_loss_info([epoch, total_epochs] + list(losses_train) + list(losses_val), rec_loss_name, coma.kld_weight, 0.1)
 
         # To get the best run in the validation subset.
-        if losses_val[-1] < best_val_loss:
-            best_val_loss = losses_val[-1]
+        if losses_val[-2] < best_val_loss:
+            best_val_loss = losses_val[-2]
             best_epoch = epoch
             best_model = copy(coma)
-            if not config['save_all_models']:0.1
+            if not config['save_all_models']:
                 save_model(coma, optimizer, epoch, losses_train[-1], losses_val[-1], checkpoint_dir)
 
         if config['save_all_models']:
@@ -320,7 +321,7 @@ def train(coma, dataloader, rec_loss_fun, optimizer, device):
         total_recon_loss += batch_size * recon_loss.item()
         loss = recon_loss
         snp_weight = 0.1
-        snp_loss = -snp_weight * (dosage - 0.9846).dot(coma.mu[:,5])
+        snp_loss = -snp_weight * (dosage - 0.9846).cuda().dot(coma.mu[:,5] - torch.mean(coma.mu[:,5])) / torch.std(coma.mu[:,5])
         total_snp_loss += batch_size * snp_loss.item()
         loss += snp_loss
         if coma.is_variational:
@@ -344,7 +345,9 @@ def evaluate(coma, dataloader, rec_loss_fun, device):
     total_loss = 0
     total_kld_loss = 0
     total_recon_loss = 0
-    for i, (data, ids, dosages) in enumerate(dataloader):
+    mus = []
+    dosages = []
+    for i, (data, ids, dosage) in enumerate(dataloader):
         data = data.to(device)
         batch_size = data.size(0)
         with torch.no_grad():
@@ -363,10 +366,13 @@ def evaluate(coma, dataloader, rec_loss_fun, device):
             total_recon_loss += batch_size * recon_loss.item()
             loss += recon_loss
             total_loss += batch_size * loss.item()
-
+        mus.append(mu[:,5].item())
+        dosages.append(dosage.item())
+    
     return total_recon_loss / len(dataloader.dataset), \
            total_kld_loss / len(dataloader.dataset), \
-           total_loss / len(dataloader.dataset)
+           total_loss / len(dataloader.dataset), \
+           stats.spearmanr(np.array(mus), np.array(dosages))
 
 
 if __name__ == '__main__':
@@ -389,6 +395,7 @@ if __name__ == '__main__':
                         help="Whether to perform scaling transformation after Procrustes alignment (to make mean distance to origin equal to 1).")
     parser.add_argument('--checkpoint_file', default=None, type=str, help='Checkpoint file from which to resume previous training (relative to repository root directory).')
     parser.add_argument('--phase', default=None, help="cardiac phase (1-50|ED|ES)")
+    parser.add_argument('--batch_size', default=None, type=int, help="Batch size")
     parser.add_argument('--z', default=None, type=int, help='Number of latent variables.')
     parser.add_argument('--optimizer', default=None, type=str, help='optimizer (adam or sgd).')
     parser.add_argument('--epoch', default=None, type=int, help='Maximum number of epochs.')
