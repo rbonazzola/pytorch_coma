@@ -5,7 +5,7 @@ import os
 def select_experiment(finished=True, selected="2020-09-11_02-13-41"):
   output_dir = "../pytorch_coma/output/"
   if finished:
-    experiments = [x for x in os.listdir(output_dir) if os.path.exists(os.path.join(output_dir, x, ".finished"))]
+    experiments = [x for x in sorted(os.listdir(output_dir)) if os.path.exists(os.path.join(output_dir, x, ".finished"))]
   else:
     experiments = [x for x in os.listdir(output_dir) if os.path.exists(os.path.join(output_dir, x))]
   w = widgets.Dropdown(

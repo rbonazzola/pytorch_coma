@@ -1,4 +1,4 @@
-library(dplyr)
+library(tidyverse)
 library(DT)
 source("constants.R")
 source("utils.R")
@@ -20,13 +20,15 @@ params_df <- inner_join(params_df, median_mse, by="experiment")
 assoc_df <- read.csv("data/metadata.csv")
 diagnoses_df <- NULL
 
-runs <- vector(mode = "character", length=0)
+runs <- params_df %>% filter(median_mse < 0.7) %>% .$experiment
 
-# Collect all the runs that completed the training.
-for (run_id in list.dirs(OUTPUT_DIR, full.names = TRUE, recursive = FALSE)) {
-  if (file.exists(file.path(run_id, ".finished")))
-    runs <- c(runs, basename(run_id))
-}
+# runs <- vector(mode = "character", length=0)
+# 
+# # Collect all the runs that completed the training.
+# for (run_id in list.dirs(OUTPUT_DIR, full.names = TRUE, recursive = FALSE)) {
+#   if (file.exists(file.path(run_id, ".finished")))
+#     runs <- c(runs, basename(run_id))
+# }
 
 cardiac_indices <- colnames(indices_df)[grepl(pattern="LV|RV|LA|RA", colnames(indices_df))]
 non_cardiac_data <- colnames(assoc_df)[!colnames(assoc_df) %in% cardiac_indices]

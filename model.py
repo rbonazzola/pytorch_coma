@@ -12,11 +12,11 @@ class Coma(torch.nn.Module):
         self.n_layers = config['n_layers']
         self.filters = config['num_conv_filters']
 
-        # self.filters.insert(0, num_features)
+        self.filters.insert(0, num_features)
 
         self.K = config['polygon_order']
         self.z = config['z']
-        self.is_variational = (config['kld_weight'] != 0)
+        self.is_variational = (config['kld_weight'] != 0)        
         if self.is_variational:
             self.kld_weight = config['kld_weight']
 

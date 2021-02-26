@@ -16,7 +16,6 @@ class Experiment():
         self.config = None
 
     def get_last_chkpt(self, file_pattern="checkpoint_{epoch}.pt"):
-        # from IPython import embed; embed()
         regex = re.compile("checkpoint_(.*).pt")
         last = max([int(regex.match(x).group(1)) for x in os.listdir(self.checkpoint_folder) if regex.match(x)])
         return os.path.join(self.checkpoint_folder, "checkpoint_" + str(last) + ".pt")
@@ -68,14 +67,17 @@ class ComaExperiment(Experiment):
         config_file = os.path.join(self.__run_dir, self.__config)
         self.config = json.load(open(config_file))
         # TO FIX
-        self.config['num_conv_filters'] = self.config['num_conv_filters'][1:]
+        # self.config['num_conv_filters'] = self.config['num_conv_filters'][1:]
 
     def load_model(self):
         device = get_device()
         chkpt_file = self.load_best_checkpoint()
         state_dict = torch.load(chkpt_file, map_location=torch.device('cpu'))
+
         # state_dict = checkpoint.get('state_dict')
+
         template_mesh = get_template_mesh(self.config)
+        
         M, A, D, U = mesh_operations.generate_transform_matrices(template_mesh, self.config['downsampling_factors'])
         D_t = [scipy_to_torch_sparse(d).to(device) for d in D]
         U_t = [scipy_to_torch_sparse(u).to(device) for u in U]
@@ -96,9 +98,11 @@ class ComaExperiment(Experiment):
         return prealigned_meshes
 
 
-    def load_z(self, inplace=False):
+    def load_z(self, drop_subset=True, inplace=False):
         # raise NotImplementedError
-        z = pd.read_csv(os.path.join(self.__run_dir, self.__z)).set_index("ID").drop("subset",1)
+        z = pd.read_csv(os.path.join(self.__run_dir, self.__z)).set_index("ID")
+        if drop_subset:
+            z = z.drop("subset", 1)
         if inplace:
             self.z = z
         else:

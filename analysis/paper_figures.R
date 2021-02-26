@@ -2,7 +2,9 @@ source("relation_to_other_variables.R")
 
 run_ids <- c(
   "experiment_1"="2020-09-11_02-13-41", 
-  "experiment_2"="2020-09-30_12-36-48"
+  "experiment_2"="2020-09-30_12-36-48",
+  "without_retraining"="2020-11-16_13-22-45",
+  "with_retraining"="2020-11-16_13-22-45__2021-02-25_02-20-30"
 )
 
 generate_health_outcomes_fig <- function(run_id) {

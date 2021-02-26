@@ -12,7 +12,8 @@ from pprint import pprint
 from copy import copy
 import logging
 import shutil
-
+from scipy import stats
+import numpy as np
 # This is necessary in order to be able to import the pkl file with the preprocessed cardiac data
 import sys; sys.path.append("data")
 from cardiac_mesh import CardiacMesh
@@ -57,13 +58,13 @@ def save_training_info(loss_info, filename):
             handle.write("%s\n" % ( ",".join(["%d"] + ["%.5f"]*(len(row)-1)) % tuple(row) ) )
 
 
-def log_loss_info(losses, rec_loss_name, wkl, wsnp):
+def log_loss_info(losses, rec_loss_name, wkl, snp_weight):
     losses = losses[0:3] + [rec_loss_name] + losses[3:]
     # from IPython import embed; embed()
     logger.info(
         ('Epoch {:d}/{:d}:\n\t' +
-        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) - ' + str(wsnp) + ' * {:.5f} (SNP) = {:.5f},\t' +
-        'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} = {:.5f}')
+        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) + (' + str(snp_weight) + ' * {:.5f} (SNP) = {:.5f}),\t' +
+        'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} = {:.5f}' + ' (correlation, p-value: {})')
         .format(*losses)
     )
 
@@ -171,7 +172,7 @@ def main(config):
     checkpoint_file = config['checkpoint_file']
     if checkpoint_file:
         logging.info("Resuming training from previous execution: %s" % checkpoint_file)
-        checkpoint = torch.load(checkpoint_file, map_location=torch.device('cpu'))
+        checkpoint = torch.load(checkpoint_file, map_location='cuda:0')
         start_epoch = checkpoint['epoch_num']
         coma.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
@@ -193,6 +194,9 @@ def main(config):
     loss_df = pd.DataFrame(columns=["epoch", "reconstruction_loss", "kld_loss", "snp_loss", "total_loss", "subset"])
     last_losses = []
 
+    logger.info(str(evaluate(coma, train_loader, rec_loss_fun, device)))
+    logger.info(str(evaluate(coma, val_loader, rec_loss_fun, device)))
+
     for epoch in range(start_epoch, total_epochs + 1):
 
         losses_train = train(coma, train_loader, rec_loss_fun, optimizer, device)
@@ -200,14 +204,14 @@ def main(config):
         loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_train) + ["train"]], columns=loss_df.columns))
         # loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_val) + ["validation"]], columns=loss_df.columns))        
         
-        log_loss_info([epoch, total_epochs] + list(losses_train) + list(losses_val), rec_loss_name, coma.kld_weight, 0.1)
+        log_loss_info([epoch, total_epochs] + list(losses_train) + list(losses_val), rec_loss_name, coma.kld_weight, config["snp_weight"])
 
         # To get the best run in the validation subset.
-        if losses_val[-1] < best_val_loss:
-            best_val_loss = losses_val[-1]
+        if losses_val[-2] < best_val_loss:
+            best_val_loss = losses_val[-2]
             best_epoch = epoch
             best_model = copy(coma)
-            if not config['save_all_models']:0.1
+            if not config['save_all_models']:
                 save_model(coma, optimizer, epoch, losses_train[-1], losses_val[-1], checkpoint_dir)
 
         if config['save_all_models']:
@@ -265,7 +269,7 @@ def main(config):
         for i, loader in enumerate(loader_list):
             subset = subsets[i]
             all_subsets += [subset] * len(loader.dataset)
-            for batch, ids in loader:
+            for batch, ids, dosage in loader:
                 #TODO: We are duplicating code here. The best would be to change encoder according to is_variational
                 batch = batch.to(device)
                 if coma.is_variational:
@@ -319,10 +323,17 @@ def train(coma, dataloader, rec_loss_fun, optimizer, device):
         recon_loss = rec_loss_fun(out, data.reshape(-1, coma.filters[0]))
         total_recon_loss += batch_size * recon_loss.item()
         loss = recon_loss
-        snp_weight = 0.1
-        snp_loss = -snp_weight * (dosage - 0.9846).dot(coma.mu[:,5])
+        snp_weight = config["snp_weight"]
+
+        ddosage = dosage - 0.9846
+        ddosage /= torch.sqrt(torch.sum(dosage ** 2))
+        dz = coma.mu[:,2] - torch.mean(coma.mu[:,2])
+        snp_loss = torch.sum(ddosage.cuda() * dz.cuda()) 
+        snp_loss *= torch.rsqrt(torch.sum(dz**2))
+        snp_loss *= torch.rsqrt(torch.sum(ddosage**2))
+        # snp_loss = - snp_weight * ((dosage - 0.9846)/np.sqrt(0.9846*(1-0.9846/2))).cuda().dot(coma.mu[:,5] - torch.mean(coma.mu[:,5])) / torch.std(coma.mu[:,5])
         total_snp_loss += batch_size * snp_loss.item()
-        loss += snp_loss
+        loss += snp_weight * snp_loss
         if coma.is_variational:
             # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
             kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
@@ -344,29 +355,42 @@ def evaluate(coma, dataloader, rec_loss_fun, device):
     total_loss = 0
     total_kld_loss = 0
     total_recon_loss = 0
-    for i, (data, ids, dosages) in enumerate(dataloader):
+    mus = []
+    dosages = []
+    for i, (data, ids, dosage) in enumerate(dataloader):
         data = data.to(device)
         batch_size = data.size(0)
         with torch.no_grad():
+            out = coma(data)
             if coma.is_variational:
-                mu, log_var = coma.encoder(x=data)
-                z = mu # coma.sampling(mu, log_var)
+                # mu, log_var = coma.encoder(x=data)
+                # z = mu # coma.sampling(mu, log_var)
                 # https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
                 kld_loss = -0.5 * torch.mean(torch.mean(1 + coma.log_var - coma.mu ** 2 - coma.log_var.exp(), dim=1), dim=0)
                 loss = coma.kld_weight * kld_loss
                 total_kld_loss += batch_size * kld_loss.item()
             else:
-                z = coma.encoder(x=data)
+                # z = coma.encoder(x=data)
                 loss = 0
-            out = coma.decoder(z)
+            # out = coma.decoder(z)
             recon_loss = rec_loss_fun(out, data.reshape(-1, coma.filters[0]))
             total_recon_loss += batch_size * recon_loss.item()
             loss += recon_loss
             total_loss += batch_size * loss.item()
-
+        if len(dosage) == 1:
+          mus.append(coma.mu[:,2].item())
+          dosages.append(dosage.item())
+        else:
+          mus.extend(coma.mu[:,2].tolist())
+          dosages.extend(dosage.tolist())
+    
+    corr = stats.spearmanr(np.array(mus), np.array(dosages))
+    total_loss -= batch_size * config["snp_weight"] * np.abs(corr[0])
+     
     return total_recon_loss / len(dataloader.dataset), \
            total_kld_loss / len(dataloader.dataset), \
-           total_loss / len(dataloader.dataset)
+           total_loss / len(dataloader.dataset), \
+           corr
 
 
 if __name__ == '__main__':
@@ -389,6 +413,8 @@ if __name__ == '__main__':
                         help="Whether to perform scaling transformation after Procrustes alignment (to make mean distance to origin equal to 1).")
     parser.add_argument('--checkpoint_file', default=None, type=str, help='Checkpoint file from which to resume previous training (relative to repository root directory).')
     parser.add_argument('--phase', default=None, help="cardiac phase (1-50|ED|ES)")
+    parser.add_argument('--batch_size', default=None, type=int, help="Batch size")
+    parser.add_argument('--snp_weight', default=0.1, type=float, help="Weight of the SNP term")
     parser.add_argument('--z', default=None, type=int, help='Number of latent variables.')
     parser.add_argument('--optimizer', default=None, type=str, help='optimizer (adam or sgd).')
     parser.add_argument('--epoch', default=None, type=int, help='Maximum number of epochs.')
@@ -433,7 +459,9 @@ if __name__ == '__main__':
         config['epoch'] = 20
         config['output_dir'] = "output/test_{TIMESTAMP}"
     config['test'] = args.test
-       
+    
+    config["snp_weight"] = args.snp_weight 
+
     overwrite_config_items(config, args)
 
     if args.dry_run:
