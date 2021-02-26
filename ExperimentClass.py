@@ -72,8 +72,10 @@ class ComaExperiment(Experiment):
     def load_model(self):
         device = get_device()
         chkpt_file = self.load_best_checkpoint()
-        state_dict = torch.load(chkpt_file, map_location=torch.device('cpu'))
-
+        try:
+          state_dict = torch.load(chkpt_file, map_location=torch.device('cpu'))
+        except:
+        state_dict = torch.load(chkpt_file)
         # state_dict = checkpoint.get('state_dict')
 
         template_mesh = get_template_mesh(self.config)

@@ -17,6 +17,7 @@ import numpy as np
 # This is necessary in order to be able to import the pkl file with the preprocessed cardiac data
 import sys; sys.path.append("data")
 from cardiac_mesh import CardiacMesh
+WSNP=1
 
 __author__ = ['Priyanka Patel', 'Rodrigo Bonazzola']
 
@@ -63,7 +64,11 @@ def log_loss_info(losses, rec_loss_name, wkl, snp_weight):
     # from IPython import embed; embed()
     logger.info(
         ('Epoch {:d}/{:d}:\n\t' +
+<<<<<<< HEAD
         'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) + (' + str(snp_weight) + ' * {:.5f} (SNP) = {:.5f}),\t' +
+=======
+        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) + (' + str(wsnp) + ' * {:.5f} (SNP) = {:.5f}),\t' +
+>>>>>>> d2303433cf4e760dcf3409ccc61f7dde87db0b4b
         'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} = {:.5f}' + ' (correlation, p-value: {})')
         .format(*losses)
     )
@@ -391,7 +396,6 @@ def evaluate(coma, dataloader, rec_loss_fun, device):
            total_kld_loss / len(dataloader.dataset), \
            total_loss / len(dataloader.dataset), \
            corr
-
 
 if __name__ == '__main__':
 

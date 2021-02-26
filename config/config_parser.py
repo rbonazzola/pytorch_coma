@@ -47,7 +47,7 @@ def read_config(fname):
     
     # Coerce the items into the correct data types
 
-    config['seed'] = int(config['seed'])
+    config['seed'] = int(config['seed']) if 'seed' in config else None
     config['procrustes_scaling'] = bool(config['procrustes_scaling'])
 
     config['n_layers'] = int(config['n_layers'])
