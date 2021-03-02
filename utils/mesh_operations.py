@@ -263,6 +263,7 @@ def generate_transform_matrices(mesh, factors):
 
     factors = map(lambda x: 1.0 / x, factors)
     M, A, D, U = [], [], [], []
+
     A.append(get_vert_connectivity(mesh.v, mesh.f).tocoo())
     M.append(mesh)
 

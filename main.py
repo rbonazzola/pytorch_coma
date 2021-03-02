@@ -64,13 +64,8 @@ def log_loss_info(losses, rec_loss_name, wkl, snp_weight):
     # from IPython import embed; embed()
     logger.info(
         ('Epoch {:d}/{:d}:\n\t' +
-<<<<<<< HEAD
-        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) + (' + str(snp_weight) + ' * {:.5f} (SNP) = {:.5f}),\t' +
-=======
-        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) + (' + str(wsnp) + ' * {:.5f} (SNP) = {:.5f}),\t' +
->>>>>>> d2303433cf4e760dcf3409ccc61f7dde87db0b4b
-        'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} = {:.5f}' + ' (correlation, p-value: {})')
-        .format(*losses)
+        'Train set: {:.5f} ({}) + ' + str(wkl) + ' * {:.5f} (KL) + ' + str(snp_weight) + ' * {:.5f} (SNP) = {:.5f},\n\t' +
+        'Validation set: {:.5f} + ' + str(wkl) + ' * {:.5f} (KL) + ' + str(snp_weight) + ' * {:.5f} (SNP) = {:.5f}\n').format(*losses)
     )
 
 
@@ -207,13 +202,13 @@ def main(config):
         losses_train = train(coma, train_loader, rec_loss_fun, optimizer, device)
         losses_val = evaluate(coma, val_loader, rec_loss_fun, device)
         loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_train) + ["train"]], columns=loss_df.columns))
-        # loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_val) + ["validation"]], columns=loss_df.columns))        
+        loss_df = loss_df.append(pd.DataFrame([[epoch] + list(losses_val) + ["validation"]], columns=loss_df.columns))        
         
         log_loss_info([epoch, total_epochs] + list(losses_train) + list(losses_val), rec_loss_name, coma.kld_weight, config["snp_weight"])
 
         # To get the best run in the validation subset.
-        if losses_val[-2] < best_val_loss:
-            best_val_loss = losses_val[-2]
+        if losses_val[-1] < best_val_loss:
+            best_val_loss = losses_val[-1]
             best_epoch = epoch
             best_model = copy(coma)
             if not config['save_all_models']:
@@ -320,6 +315,8 @@ def train(coma, dataloader, rec_loss_fun, optimizer, device):
     total_kld_loss = 0
     total_recon_loss = 0
     total_snp_loss = 0
+    mus = []
+    dosages = []
     for i, (data, ids, dosage) in enumerate(dataloader):
         data = data.to(device)
         batch_size = data.size(0)
@@ -348,9 +345,20 @@ def train(coma, dataloader, rec_loss_fun, optimizer, device):
         loss.backward()
         optimizer.step()
 
+        if len(dosage) == 1:
+          mus.append(coma.mu[:,2].item())
+          dosages.append(dosage.item())
+        else:
+          mus.extend(coma.mu[:,2].tolist())
+          dosages.extend(dosage.tolist())
+    
+    corr = stats.spearmanr(np.array(mus), np.array(dosages))[0]
+    total_loss -= batch_size * config["snp_weight"] * np.abs(corr)
+     
+
     return total_recon_loss / len(dataloader.dataset), \
            total_kld_loss / len(dataloader.dataset), \
-           total_snp_loss / len(dataloader.dataset), \
+           corr, \
            total_loss / len(dataloader.dataset)
 
 
@@ -389,13 +397,13 @@ def evaluate(coma, dataloader, rec_loss_fun, device):
           mus.extend(coma.mu[:,2].tolist())
           dosages.extend(dosage.tolist())
     
-    corr = stats.spearmanr(np.array(mus), np.array(dosages))
-    total_loss -= batch_size * config["snp_weight"] * np.abs(corr[0])
+    corr = stats.spearmanr(np.array(mus), np.array(dosages))[0]
+    total_loss -= batch_size * config["snp_weight"] * np.abs(corr)
      
     return total_recon_loss / len(dataloader.dataset), \
            total_kld_loss / len(dataloader.dataset), \
-           total_loss / len(dataloader.dataset), \
-           corr
+           corr, \
+           total_loss / len(dataloader.dataset)
 
 if __name__ == '__main__':
 

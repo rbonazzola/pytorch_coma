@@ -15,7 +15,6 @@ def get_best_gpu_device():
     '''
     import nvgpu
     gpu_info = nvgpu.gpu_info()
-    print(gpu_info)
     free_mem = [x['mem_total']-x['mem_used'] for x in gpu_info]
     best_gpu_index = free_mem.index(max(free_mem))
     best_gpu = int(gpu_info[best_gpu_index]['index'])
@@ -122,8 +121,8 @@ def get_loader(dataset, nTraining, nVal, batch_size, num_workers, shuffle=True):
     dataset = TensorDataset(torch.Tensor(dataset.point_clouds), torch.Tensor([int(x) for x in dataset.ids]))    
     datasets = random_split(dataset, [nTraining, nVal, n_indiv - nTraining - nVal])
     trainLoader =  DataLoader(dataset = datasets[0], batch_size = batch_size, shuffle=shuffle, num_workers=num_workers)
-    valLoader =  DataLoader(dataset = datasets[1], batch_size = 1, shuffle=shuffle, num_workers=num_workers)
-    testLoader =  DataLoader(dataset = datasets[2], batch_size = 1, shuffle=shuffle, num_workers=num_workers)
+    valLoader =  DataLoader(dataset = datasets[1], batch_size = batch_size, shuffle=shuffle, num_workers=num_workers)
+    testLoader =  DataLoader(dataset = datasets[2], batch_size = batch_size, shuffle=shuffle, num_workers=num_workers)
     return trainLoader, valLoader, testLoader
 
 
