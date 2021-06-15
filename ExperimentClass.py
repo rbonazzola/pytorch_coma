@@ -53,7 +53,7 @@ class ComaExperiment(Experiment):
 
     def __init__(self, folder='output/2020-10-15_07-37-37', mode='training', **kwargs):
         super(ComaExperiment, self).__init__(folder)
-        self.__run_dir = folder
+        self.run_dir = folder
         self.__checkpoints_dir = kwargs.get("checkpoints_dir", DefaultPaths.checkpoints_dir)
         self.__performance = kwargs.get("performance", DefaultPaths.performance)
         self.__z = kwargs.get("z", DefaultPaths.z)
@@ -65,7 +65,7 @@ class ComaExperiment(Experiment):
         self.__load_config()
 
     def __load_config(self):
-        config_file = os.path.join(self.__run_dir, self.__config)
+        config_file = os.path.join(self.run_dir, self.__config)
         self.config = json.load(open(config_file))
         # TO FIX
         self.config['num_conv_filters'] = self.config['num_conv_filters'][1:]
