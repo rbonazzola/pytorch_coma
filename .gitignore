@@ -10,3 +10,4 @@ output
 *.png
 data/datasets
 data/transforms
+/.project

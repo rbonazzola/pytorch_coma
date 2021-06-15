@@ -1,6 +1,6 @@
 import torch
 import sys; sys.path.append("..")
-from VTK.VTKMesh import VTKObject as Mesh
+from VTKHelpers.VTKMesh import VTKObject as Mesh
 from torch.utils.data import TensorDataset, DataLoader, random_split
 from subprocess import check_output
 import os
