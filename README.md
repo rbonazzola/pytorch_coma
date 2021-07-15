@@ -2,6 +2,8 @@
 
 This is a reimplementation of [COMA](https://github.com/anuragranj/coma) to be used for cardiac meshes derived from cardiovascular magnetic resonance (CMR) in [CISTIB](http://www.cistib.org/) using the SpASM method.
 
+![](.figs/vae_schema.png)
+
 Please follow the licensing rights of the authors if you use the code.
 
 ## Requirements
